@@ -25,6 +25,8 @@ vi.mock('lucide-react', () => ({
   Calendar: () => <div data-testid="calendar-icon" />,
   ChevronDown: () => <div data-testid="chevron-icon" />,
   MoreVertical: () => <div data-testid="more-icon" />,
+  Search: () => <div data-testid="search-icon" />,
+  X: () => <div data-testid="x-icon" />,
 }));
 
 describe('ProductionOrders Component', () => {

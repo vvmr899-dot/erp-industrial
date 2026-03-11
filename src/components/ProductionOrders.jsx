@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, ChevronDown, Calendar, Hash, Package, MoreVertical, Loader2, CheckCircle2, Trash2, RefreshCw, Edit2 } from 'lucide-react';
+import { Plus, ChevronDown, Calendar, Hash, Package, MoreVertical, Loader2, CheckCircle2, Trash2, RefreshCw, Edit2, Search, X } from 'lucide-react';
 
 const ProductionOrders = () => {
   const [orders, setOrders] = useState([]);
   const [partNumbers, setPartNumbers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [newOrder, setNewOrder] = useState({
     order_number: '',
     part_number_id: '',
@@ -90,6 +93,17 @@ const ProductionOrders = () => {
     setLoading(false);
   };
 
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = !searchTerm || 
+      order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.part_numbers?.part_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.part_numbers?.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = !statusFilter || order.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
   const fetchPartNumbers = async () => {
     const { data } = await supabase
       .from('part_numbers')
@@ -98,8 +112,47 @@ const ProductionOrders = () => {
     if (data) setPartNumbers(data);
   };
 
+  const generateOrderNumber = async () => {
+    const year = new Date().getFullYear();
+    const { data } = await supabase
+      .from('production_orders')
+      .select('order_number')
+      .like('order_number', `OP-${year}%`)
+      .order('order_number', { ascending: false })
+      .limit(1);
+    
+    let nextNum = 1;
+    if (data && data.length > 0) {
+      const lastNum = parseInt(data[0].order_number.split('-')[2] || '0');
+      nextNum = lastNum + 1;
+    }
+    return `OP-${year}-${String(nextNum).padStart(4, '0')}`;
+  };
+
+  const handleOpenNewOrder = async () => {
+    setEditingOrder(null);
+    const newOrderNum = await generateOrderNumber();
+    setNewOrder({
+      order_number: newOrderNum,
+      part_number_id: '',
+      quantity_planned: '',
+      start_date: new Date().toISOString().split('T')[0],
+      commit_date: '',
+      lot_number: ''
+    });
+    setShowAddModal(true);
+  };
+
   const handleSaveOrder = async (e) => {
     e.preventDefault();
+    
+    if (!newOrder.part_number_id || !newOrder.quantity_planned) {
+      alert("Por favor completa todos los campos requeridos");
+      return;
+    }
+
+    setSaving(true);
+    
     const orderData = {
       order_number: newOrder.order_number,
       part_number_id: newOrder.part_number_id,
@@ -122,6 +175,8 @@ const ProductionOrders = () => {
         .insert(orderData)
         .select();
     }
+
+    setSaving(false);
 
     if (result.error) {
       alert("Error al guardar la orden: " + result.error.message);
@@ -272,15 +327,49 @@ const ProductionOrders = () => {
 
   return (
     <div className="container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
         <div>
           <h1>Órdenes de Producción</h1>
           <p style={{ color: 'var(--text-muted)' }}>Gestión y seguimiento de trabajos en planta.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditingOrder(null); setNewOrder({ order_number: '', part_number_id: '', quantity_planned: '', start_date: new Date().toISOString().split('T')[0], commit_date: '', lot_number: '' }); setShowAddModal(true); }}>
+        <button className="btn btn-primary" onClick={handleOpenNewOrder}>
           <Plus size={18} /> Nueva Orden
         </button>
       </header>
+
+      <div className="card-mesh" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+          <Search size={18} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input 
+            type="text" 
+            placeholder="Buscar por orden o producto..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ paddingLeft: '2.5rem', width: '100%' }}
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+        <select 
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          style={{ width: '180px' }}
+        >
+          <option value="">Todos los estados</option>
+          {statuses.map(s => (
+            <option key={s.id} value={s.id}>{s.label}</option>
+          ))}
+        </select>
+        <button className="btn" onClick={fetchOrders} title="Actualizar">
+          <RefreshCw size={16} />
+        </button>
+      </div>
 
       <div className="card-mesh" style={{ overflowX: 'auto', padding: '0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -303,14 +392,14 @@ const ProductionOrders = () => {
                   <Loader2 className="animate-spin" size={24} color="var(--primary)" />
                 </td>
               </tr>
-            ) : orders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <tr>
                 <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  No hay órdenes registradas.
+                  {searchTerm || statusFilter ? 'No se encontraron órdenes con los filtros aplicados.' : 'No hay órdenes registradas.'}
                 </td>
               </tr>
             ) : (
-              orders.map(order => (
+              filteredOrders.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '1rem', fontWeight: '600' }}>{order.order_number}</td>
                   <td style={{ padding: '1rem' }}>
@@ -483,11 +572,12 @@ const ProductionOrders = () => {
                   className="btn" 
                   style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}
                   onClick={() => setShowAddModal(false)}
+                  disabled={saving}
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>
-                  Crear Orden
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={saving}>
+                  {saving ? <Loader2 className="animate-spin" size={16} /> : (editingOrder ? 'Actualizar' : 'Crear Orden')}
                 </button>
               </div>
             </form>

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Layout, Factory, ClipboardList, Package, ShoppingCart, BarChart3, LayoutDashboard, AlertCircle, Settings } from 'lucide-react';
+import { Layout, Factory, ClipboardList, Package, ShoppingCart, BarChart3, LayoutDashboard, AlertCircle, Settings, X } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'part_numbers', label: 'Números de Parte', icon: Package },
@@ -14,17 +14,38 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="logo">
         <Layout size={24} />
-        <span>G-ERP MES</span>
+        <span className="desktop-only">G-ERP MES</span>
+        <span className="mobile-only" style={{ marginLeft: 'auto' }}>
+          <button 
+            onClick={onClose}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: 'var(--text-muted)', 
+              cursor: 'pointer',
+              padding: '0.25rem'
+            }}
+          >
+            <X size={24} />
+          </button>
+        </span>
       </div>
-      <nav>
+      <nav style={{ marginTop: '1rem' }}>
         {menuItems.map((item) => (
           <div
             key={item.id}
             className={`nav-link ${activeTab === item.id ? 'active' : ''}`}
             onClick={() => setActiveTab(item.id)}
+            role="button"
+            tabIndex={0}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                setActiveTab(item.id);
+              }
+            }}
           >
             <item.icon size={20} />
             <span>{item.label}</span>

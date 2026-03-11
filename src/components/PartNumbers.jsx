@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Package, Plus, Search, Loader2, Trash2, Edit2 } from 'lucide-react';
+import { Package, Plus, Search, Loader2, Trash2, Edit2, X } from 'lucide-react';
 
 const PartNumbers = () => {
   const [parts, setParts] = useState([]);
@@ -9,6 +9,9 @@ const PartNumbers = () => {
   const [newPart, setNewPart] = useState({ part_number: '', description: '', uom: '' });
   const [editingPart, setEditingPart] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchParts();
@@ -16,36 +19,84 @@ const PartNumbers = () => {
 
   const fetchParts = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    setError('');
+    const { data, error: err } = await supabase
       .from('part_numbers')
       .select('*')
       .order('part_number');
     
-    if (data) setParts(data);
+    if (err) {
+      setError('Error al cargar los datos: ' + err.message);
+    } else if (data) {
+      setParts(data);
+    }
     setLoading(false);
   };
 
+  const filteredParts = parts.filter(part => 
+    part.part_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    part.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const handleSavePart = async (e) => {
     e.preventDefault();
+    
+    if (!newPart.part_number.trim() || !newPart.description.trim()) {
+      setError('Todos los campos son obligatorios');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
     if (editingPart) {
       const { error } = await supabase
         .from('part_numbers')
-        .update(newPart)
+        .update({ 
+          part_number: newPart.part_number.trim().toUpperCase(),
+          description: newPart.description.trim(),
+          uom: newPart.uom?.trim() || ''
+        })
         .eq('id', editingPart.id);
-      if (!error) {
-        fetchParts();
-        setShowAddModal(false);
-        setEditingPart(null);
-        setNewPart({ part_number: '', description: '', uom: '' });
+      
+      if (error) {
+        setError('Error al actualizar: ' + error.message);
+        setSaving(false);
+        return;
       }
+      fetchParts();
+      setShowAddModal(false);
+      setEditingPart(null);
+      setNewPart({ part_number: '', description: '', uom: '' });
     } else {
-      const { error } = await supabase.from('part_numbers').insert([newPart]);
-      if (!error) {
-        fetchParts();
-        setShowAddModal(false);
-        setNewPart({ part_number: '', description: '', uom: '' });
+      const { data: existing } = await supabase
+        .from('part_numbers')
+        .select('id')
+        .eq('part_number', newPart.part_number.trim().toUpperCase())
+        .maybeSingle();
+      
+      if (existing) {
+        setError('Ya existe un número de parte con ese código');
+        setSaving(false);
+        return;
       }
+
+      const { error } = await supabase.from('part_numbers').insert([{
+        part_number: newPart.part_number.trim().toUpperCase(),
+        description: newPart.description.trim(),
+        uom: newPart.uom?.trim() || ''
+      }]);
+      
+      if (error) {
+        setError('Error al guardar: ' + error.message);
+        setSaving(false);
+        return;
+      }
+      fetchParts();
+      setShowAddModal(false);
+      setNewPart({ part_number: '', description: '', uom: '' });
     }
+    setSaving(false);
   };
 
   const handleEditClick = (part) => {
@@ -77,10 +128,37 @@ const PartNumbers = () => {
           <h1>Números de Parte</h1>
           <p style={{ color: 'var(--text-muted)' }}>Catálogo maestro de piezas y componentes.</p>
         </div>
-        <button onClick={() => { setEditingPart(null); setNewPart({ part_number: '', description: '', uom: '' }); setShowAddModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <button onClick={() => { setEditingPart(null); setNewPart({ part_number: '', description: '', uom: '' }); setError(''); setShowAddModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Plus size={18} /> Nuevo Número de Parte
         </button>
       </header>
+
+      <div className="card-mesh" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+        <div style={{ position: 'relative', maxWidth: '400px' }}>
+          <Search size={18} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input 
+            type="text" 
+            placeholder="Buscar por número de parte o descripción..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ paddingLeft: '2.5rem', width: '100%' }}
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="card-mesh" style={{ borderLeft: '4px solid var(--danger)', marginBottom: '1.5rem', color: 'var(--danger)', padding: '1rem' }}>
+          {error}
+        </div>
+      )}
 
       <div className="card-mesh" style={{ padding: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -99,14 +177,14 @@ const PartNumbers = () => {
                   <Loader2 className="animate-spin" size={24} color="var(--primary)" />
                 </td>
               </tr>
-            ) : parts.length === 0 ? (
+            ) : filteredParts.length === 0 ? (
               <tr>
                 <td colSpan="4" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                  No hay números de parte registrados.
+                  {searchTerm ? `No se encontraron resultados para "${searchTerm}"` : 'No hay números de parte registrados.'}
                 </td>
               </tr>
             ) : (
-              parts.map(part => (
+              filteredParts.map(part => (
                 <tr key={part.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -139,6 +217,13 @@ const PartNumbers = () => {
         <div className="modal-overlay">
           <div className="modal-content card-mesh" style={{ width: '400px' }}>
             <h2 style={{ marginBottom: '1.5rem' }}>{editingPart ? 'Editar Número de Parte' : 'Añadir Número de Parte'}</h2>
+            
+            {error && (
+              <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '0.75rem', marginBottom: '1rem', color: 'var(--danger)', fontSize: '0.875rem' }}>
+                {error}
+              </div>
+            )}
+
             <form onSubmit={handleSavePart}>
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Número de Parte</label>
@@ -172,8 +257,10 @@ const PartNumbers = () => {
                 />
               </div>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">Cancelar</button>
-                <button type="submit" className="btn-primary">Guardar</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary" disabled={saving}>Cancelar</button>
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? <Loader2 className="animate-spin" size={16} /> : (editingPart ? 'Actualizar' : 'Guardar')}
+                </button>
               </div>
             </form>
           </div>

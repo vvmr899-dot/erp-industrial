@@ -11,6 +11,12 @@ import ProductionRouting from './components/ProductionRouting';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleNavClick = (tab) => {
+    setActiveTab(tab);
+    setSidebarOpen(false);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -42,7 +48,35 @@ function App() {
 
   return (
     <>
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      {/* Mobile Header with Hamburger */}
+      <div className="mobile-header">
+        <button 
+          className={`hamburger-btn ${sidebarOpen ? 'open' : ''}`}
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label="Toggle menu"
+        >
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+        <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.125rem' }}>Nexus ERP</span>
+      </div>
+
+      {/* Sidebar Overlay for Mobile */}
+      <div 
+        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
+      {/* Sidebar */}
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={handleNavClick}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+
+      {/* Main Content */}
       <main className="main-content">
         {renderContent()}
       </main>
