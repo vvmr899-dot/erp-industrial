@@ -11,6 +11,9 @@ import PartNumbers from './components/PartNumbers';
 import ProductionRouting from './components/ProductionRouting';
 import UserManagement from './components/UserManagement';
 import Login from './components/Login';
+import QualityInspections from './components/QualityInspections';
+import WarehouseReceipts from './components/WarehouseReceipts';
+import Traceability from './components/Traceability';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -84,6 +87,12 @@ function App() {
         return <PartNumbers />;
       case 'routing':
         return <ProductionRouting />;
+      case 'quality':
+        return <QualityInspections userRole={userRole} />;
+      case 'receipts':
+        return <WarehouseReceipts userRole={userRole} />;
+      case 'traceability':
+        return <Traceability />;
       case 'users':
         return <UserManagement userRole={userRole} />;
       default:

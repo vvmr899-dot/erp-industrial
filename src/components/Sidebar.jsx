@@ -1,5 +1,8 @@
-import React from 'react';
-import { Layout, Factory, ClipboardList, Package, ShoppingCart, BarChart3, LayoutDashboard, AlertCircle, Settings, X, Users } from 'lucide-react';
+import { 
+  Layout, Factory, ClipboardList, Package, ShoppingCart, 
+  BarChart3, LayoutDashboard, AlertCircle, Settings, X, 
+  Users, ShieldCheck, Truck, History 
+} from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
   const menuItems = [
@@ -10,10 +13,13 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
     { id: 'wip', label: 'Seguimiento WIP', icon: Layout },
     { id: 'capture', label: 'Captura Prod', icon: Layout },
     { id: 'scrap', label: 'Reporte Scrap', icon: AlertCircle },
+    { id: 'quality', label: 'Calidad', icon: ShieldCheck },
+    { id: 'receipts', label: 'Recepciones', icon: Truck },
+    { id: 'traceability', label: 'Trazabilidad', icon: History },
     { id: 'inventory', label: 'Inventario', icon: ShoppingCart },
   ];
 
-  if (userRole === 'admin') {
+  if (userRole === 'admin' || userRole === 'supervisor') {
     menuItems.push({ id: 'users', label: 'Gestión Usuarios', icon: Users });
   }
 
