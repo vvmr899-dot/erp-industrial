@@ -97,9 +97,11 @@ function App() {
         return <UserManagement userRole={userRole} />;
       default:
         return (
-          <div className="container">
-            <h1 style={{ textTransform: 'capitalize' }}>{activeTab.replace('_', ' ')}</h1>
-            <p style={{ color: 'var(--text-muted)' }}>Módulo en desarrollo.</p>
+          <div className="container animate-fade-in">
+            <h1 className="display-small" style={{ textTransform: 'capitalize' }}>
+              {activeTab.replace('_', ' ')}
+            </h1>
+            <p className="text-muted">Módulo en desarrollo.</p>
           </div>
         );
     }
@@ -107,7 +109,7 @@ function App() {
 
   if (loading) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+      <div style={{ height: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <div className="loader"></div>
       </div>
     );
@@ -119,39 +121,17 @@ function App() {
 
   return (
     <>
-      {/* Mobile Header with Hamburger */}
-      <div className="mobile-header">
-        <button 
-          className={`hamburger-btn ${sidebarOpen ? 'open' : ''}`}
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle menu"
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: '1.125rem' }}>Nexus ERP</span>
-          <button 
-            onClick={() => supabase.auth.signOut()}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: 'var(--text-muted)', 
-              fontSize: '0.75rem', 
-              cursor: 'pointer' 
-            }}
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-      </div>
-
-      {/* Sidebar Overlay for Mobile */}
-      <div 
-        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-      />
+      {/* Background Radial Glow */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'radial-gradient(circle at 50% -10%, rgba(99, 102, 241, 0.12), transparent 70%)',
+        zIndex: -1,
+        pointerEvents: 'none'
+      }}></div>
 
       {/* Sidebar */}
       <Sidebar 
@@ -164,16 +144,56 @@ function App() {
 
       {/* Main Content */}
       <main className="main-content">
-        <div style={{ position: 'absolute', top: '1rem', right: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }} className="desktop-only">
-          <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{session.user.email} ({userRole})</span>
+        {/* Desktop Header Overlay */}
+        <div style={{ 
+          position: 'sticky', 
+          top: 0, 
+          zIndex: 10,
+          background: 'rgba(3, 7, 18, 0.5)',
+          backdropFilter: 'blur(8px)',
+          margin: '-2.5rem -3rem 2rem',
+          padding: '1.25rem 3rem',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '1.5rem',
+          borderBottom: '1px solid var(--border)'
+        }} className="desktop-only">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{session.user.email}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{userRole}</div>
+            </div>
+            <div style={{ 
+              width: '40px', 
+              height: '40px', 
+              borderRadius: '50%', 
+              background: 'var(--primary)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: '1rem',
+              boxShadow: '0 0 15px rgba(99, 102, 241, 0.3)'
+            }}>
+              {session.user.email[0].toUpperCase()}
+            </div>
+          </div>
           <button 
             onClick={() => supabase.auth.signOut()}
             className="btn"
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
+            style={{ 
+              padding: '0.5rem 1rem', 
+              fontSize: '0.75rem', 
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: 'var(--danger)',
+              border: '1px solid rgba(239, 68, 68, 0.2)'
+            }}
           >
             Cerrar Sesión
           </button>
         </div>
+
         {renderContent()}
       </main>
     </>

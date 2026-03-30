@@ -5,24 +5,34 @@ const ResponsiveTable = ({
   columns, 
   keyField = 'id', 
   loading, 
-  emptyMessage = 'No hay datos disponibles',
-  searchTerm,
-  onSearch,
-  searchPlaceholder = 'Buscar...'
+  emptyMessage = 'No hay datos disponibles'
 }) => {
-  const renderDesktopTable = () => (
-    <div className="card-mesh table-container" style={{ padding: 0, overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem' }}>
+        <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid var(--primary)', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto' }}></div>
+        <p className="text-muted" style={{ marginTop: '1.5rem', fontSize: '0.875rem' }}>Procesando información...</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem' }}>
+        <p className="text-muted">{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-wrapper animate-fade-in" style={{ overflowX: 'auto', width: '100%' }}>
+      <table style={{ minWidth: '800px' }}>
         <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)' }}>
+          <tr>
             {columns.map((col) => (
               <th 
                 key={col.key} 
                 style={{ 
-                  padding: '1rem', 
-                  color: 'var(--text-muted)', 
-                  fontSize: '0.75rem', 
-                  fontWeight: '700',
                   textAlign: col.align || 'left',
                   whiteSpace: 'nowrap'
                 }}
@@ -33,98 +43,22 @@ const ResponsiveTable = ({
           </tr>
         </thead>
         <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={columns.length} style={{ textAlign: 'center', padding: '3rem' }}>
-                <div style={{ color: 'var(--text-muted)' }}>Cargando...</div>
-              </td>
+          {data.map((item) => (
+            <tr key={item[keyField]} className="table-row-hover">
+              {columns.map((col) => (
+                <td 
+                  key={col.key} 
+                  style={{ 
+                    textAlign: col.align || 'left'
+                  }}
+                >
+                  {col.render ? col.render(item) : item[col.key]}
+                </td>
+              ))}
             </tr>
-          ) : data.length === 0 ? (
-            <tr>
-              <td colSpan={columns.length} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-                {emptyMessage}
-              </td>
-            </tr>
-          ) : (
-            data.map((item) => (
-              <tr key={item[keyField]} style={{ borderBottom: '1px solid var(--border)' }}>
-                {columns.map((col) => (
-                  <td 
-                    key={col.key} 
-                    style={{ 
-                      padding: '1rem',
-                      textAlign: col.align || 'left'
-                    }}
-                  >
-                    {col.render ? col.render(item) : item[col.key]}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
+          ))}
         </tbody>
       </table>
-    </div>
-  );
-
-  const renderMobileCards = () => (
-    <div className="responsive-cards">
-      {loading ? (
-        <div className="card-mesh" style={{ textAlign: 'center', padding: '2rem' }}>
-          <div style={{ color: 'var(--text-muted)' }}>Cargando...</div>
-        </div>
-      ) : data.length === 0 ? (
-        <div className="card-mesh" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-          {emptyMessage}
-        </div>
-      ) : (
-        data.map((item) => (
-          <div key={item[keyField]} className="table-card">
-            <div className="table-card-header">
-              <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {columns[0]?.render ? columns[0].render(item) : item[columns[0]?.key]}
-              </span>
-              {columns[columns.length - 1]?.render && (
-                <div onClick={(e) => e.stopPropagation()}>
-                  {columns[columns.length - 1].render(item)}
-                </div>
-              )}
-            </div>
-            {columns.slice(1, -1).map((col) => (
-              <div key={col.key} className="table-card-row">
-                <span className="table-card-label">{col.title}</span>
-                <span className="table-card-value">
-                  {col.render ? col.render(item) : item[col.key]}
-                </span>
-              </div>
-            ))}
-          </div>
-        ))
-      )}
-    </div>
-  );
-
-  return (
-    <div className="responsive-table-wrapper">
-      {onSearch && (
-        <div className="card-mesh" style={{ padding: '1rem', marginBottom: '1rem' }}>
-          <input
-            type="text"
-            placeholder={searchPlaceholder}
-            value={searchTerm || ''}
-            onChange={(e) => onSearch(e.target.value)}
-            style={{ width: '100%', maxWidth: '400px' }}
-          />
-        </div>
-      )}
-      {/* Desktop: Show table */}
-      <div className="desktop-table">
-        {renderDesktopTable()}
-      </div>
-      {/* Mobile: Show cards */}
-      <div className="mobile-cards">
-        {renderMobileCards()}
-      </div>
     </div>
   );
 };

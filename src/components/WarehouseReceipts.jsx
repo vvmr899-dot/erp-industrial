@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import ResponsiveTable from './ResponsiveTable';
-import { Truck, Plus, CheckCircle2, XCircle, Clock, FileText, Search } from 'lucide-react';
+import { Truck, Plus, CheckCircle2, XCircle, Clock, FileText, Search, PackageCheck, AlertCircle } from 'lucide-react';
 
 const WarehouseReceipts = ({ userRole }) => {
   const [receipts, setReceipts] = useState([]);
@@ -78,21 +78,24 @@ const WarehouseReceipts = ({ userRole }) => {
   };
 
   const columns = [
-    { key: 'folio', title: 'Folio' },
+    { key: 'folio', title: 'Folio', render: (item) => <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <PackageCheck size={18} className="text-primary" />
+        <span style={{ fontWeight: 600 }}>{item.folio}</span>
+      </div> 
+    },
     { 
       key: 'fecha_recepcion', 
       title: 'Fecha', 
       render: (item) => new Date(item.fecha_recepcion).toLocaleDateString() 
     },
-    { key: 'tipo_material', title: 'Tipo', render: (item) => item.tipo_material.replace('_', ' ').toUpperCase() },
-    { key: 'proveedor', title: 'Proveedor' },
-    { key: 'orden_compra', title: 'OC' },
+    { key: 'tipo_material', title: 'Tipo', render: (item) => <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>{item.tipo_material.replace('_', ' ').toUpperCase()}</span> },
+    { key: 'proveedor', title: 'Proveedor', render: (item) => <span style={{ fontWeight: 500 }}>{item.proveedor}</span> },
+    { key: 'orden_compra', title: 'O.C.' },
     { 
       key: 'estatus', 
       title: 'Estado', 
       render: (item) => getStatusBadge(item.estatus) 
-    },
-    { key: 'notas', title: 'Notas' }
+    }
   ];
 
   const filteredData = receipts.filter(item => 
@@ -103,34 +106,58 @@ const WarehouseReceipts = ({ userRole }) => {
 
   return (
     <div className="container animate-fade-in">
-      <div className="header-actions">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem' }}>
         <div>
           <h1 className="display-small">Recepciones de Almacén</h1>
-          <p className="text-muted">Gestión de entrada de materiales y materias primas.</p>
+          <p className="text-muted">Control de ingresos de suministros y materiales.</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}>
           <Plus size={20} /> Nueva Recepción
         </button>
       </div>
 
-      <ResponsiveTable 
-        data={filteredData}
-        columns={columns}
-        loading={loading}
-        searchTerm={searchTerm}
-        onSearch={setSearchTerm}
-        searchPlaceholder="Buscar por folio, proveedor u OC..."
-      />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+        <div className="card-mesh" style={{ textAlign: 'center' }}>
+          <p className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Pendientes hoy</p>
+          <div style={{ fontSize: '2rem', fontWeight: 700 }}>4</div>
+        </div>
+        <div className="card-mesh" style={{ textAlign: 'center' }}>
+          <p className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Confirmadas mes</p>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--accent)' }}>128</div>
+        </div>
+        <div className="card-mesh" style={{ textAlign: 'center' }}>
+          <p className="text-muted" style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Canceladas</p>
+          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--danger)' }}>2</div>
+        </div>
+      </div>
+
+      <div className="card-mesh" style={{ padding: 0 }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <Search size={20} className="text-muted" />
+          <input 
+            type="text" 
+            placeholder="Buscar por folio, proveedor u OC..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ background: 'transparent', border: 'none', padding: 0, fontSize: '0.95rem' }}
+          />
+        </div>
+        <ResponsiveTable 
+          data={filteredData}
+          columns={columns}
+          loading={loading}
+        />
+      </div>
 
       {showModal && (
         <div className="modal-overlay">
-          <div className="modal-content card-mesh">
-            <div className="modal-header">
-              <h3>Nueva Recepción</h3>
-              <button className="btn-close" onClick={() => setShowModal(false)}>&times;</button>
+          <div className="card-mesh" style={{ maxWidth: '600px', width: '90%', padding: '2.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+              <h3 style={{ fontSize: '1.5rem', fontWeight: 700 }}>Registrar Recepción</h3>
+              <button className="icon-btn" onClick={() => setShowModal(false)}><XCircle size={24} /></button>
             </div>
-            <form onSubmit={handleCreateReceipt}>
-              <div className="grid-2">
+            <form onSubmit={handleCreateReceipt} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div className="form-group">
                   <label>Folio</label>
                   <input 
@@ -138,7 +165,7 @@ const WarehouseReceipts = ({ userRole }) => {
                     required 
                     value={formData.folio}
                     onChange={(e) => setFormData({...formData, folio: e.target.value})}
-                    placeholder="REC-XXXX"
+                    placeholder="REC-2024-001"
                   />
                 </div>
                 <div className="form-group">
@@ -159,27 +186,30 @@ const WarehouseReceipts = ({ userRole }) => {
                   type="text" 
                   value={formData.proveedor}
                   onChange={(e) => setFormData({...formData, proveedor: e.target.value})}
+                  placeholder="Nombre del proveedor o distribuidor"
                 />
               </div>
               <div className="form-group">
-                <label>Orden de Compra</label>
+                <label>Orden de Compra / Referencia</label>
                 <input 
                   type="text" 
                   value={formData.orden_compra}
                   onChange={(e) => setFormData({...formData, orden_compra: e.target.value})}
+                  placeholder="OC-XXXX / Factura"
                 />
               </div>
               <div className="form-group">
-                <label>Notas</label>
+                <label>Notas Adicionales</label>
                 <textarea 
                   rows="3"
                   value={formData.notas}
                   onChange={(e) => setFormData({...formData, notas: e.target.value})}
+                  placeholder="Detalles sobre el estado del material recibido..."
                 ></textarea>
               </div>
-              <div className="modal-footer">
-                <button type="button" className="btn" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button type="submit" className="btn btn-primary">Crear Borrador</button>
+              <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
+                <button type="button" className="btn" style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }} onClick={() => setShowModal(false)}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>Registrar Entrada</button>
               </div>
             </form>
           </div>

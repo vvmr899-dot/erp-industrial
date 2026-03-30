@@ -1,8 +1,10 @@
+import React from 'react';
 import { 
   Layout, Factory, ClipboardList, Package, ShoppingCart, 
   BarChart3, LayoutDashboard, AlertCircle, Settings, X, 
-  Users, ShieldCheck, Truck, History 
+  Users, ShieldCheck, Truck, History, LogOut
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
   const menuItems = [
@@ -26,24 +28,31 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
   return (
     <div className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="logo">
-        <Layout size={24} />
-        <span className="desktop-only">G-ERP MES</span>
+        <div style={{ 
+          width: '32px', 
+          height: '32px', 
+          background: 'var(--primary)', 
+          borderRadius: '8px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          boxShadow: '0 0 15px rgba(99, 102, 241, 0.5)'
+        }}>
+          <Layout size={20} color="white" />
+        </div>
+        <span className="desktop-only" style={{ background: 'linear-gradient(to right, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Nexus ERP</span>
         <span className="mobile-only" style={{ marginLeft: 'auto' }}>
           <button 
             onClick={onClose}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: 'var(--text-muted)', 
-              cursor: 'pointer',
-              padding: '0.25rem'
-            }}
+            className="icon-btn"
           >
             <X size={24} />
           </button>
         </span>
       </div>
-      <nav style={{ marginTop: '1rem' }}>
+
+      <nav style={{ flex: 1 }}>
+        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: '1rem', paddingLeft: '1rem' }}>Módulos</p>
         {menuItems.map((item) => (
           <div
             key={item.id}
@@ -62,6 +71,17 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
           </div>
         ))}
       </nav>
+
+      <div style={{ marginTop: 'auto', paddingTop: '2rem', borderTop: '1px solid var(--border)' }}>
+        <button 
+          onClick={() => supabase.auth.signOut()}
+          className="nav-link"
+          style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'left' }}
+        >
+          <LogOut size={20} />
+          <span>Cerrar Sesión</span>
+        </button>
+      </div>
     </div>
   );
 };
