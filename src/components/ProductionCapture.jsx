@@ -277,17 +277,34 @@ const fetchWIP = async (orderId) => {
 
       if (errLog) throw new Error(errLog.message);
 
+      const isActualFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');
+
       // Si se reportaron piezas con defectos, las registramos en Calidad (production_scrap)
       if (bad > 0) {
         await supabase.from('production_scrap').insert({
           production_order_id: selectedOrderId,
           routing_id: currentStep.routing_id,
-          defect_type: formData.defect_type || 'Pendiente de clasificar',
+          defect_type: formData.defect_type || (isActualFQC ? 'FQC Rechazo' : 'Pendiente de clasificar'),
           quantity: bad,
           operator_name: formData.operator_name,
           defect_comment: formData.defect_notes,
           lot_number: formData.lot_number,
-          status: 'Pendiente'
+          status: isActualFQC ? 'RECHAZADO' : 'Pendiente'
+        });
+      }
+
+      // Si es FQC y hay piezas buenas, generamos el registro de "Aprobado" para alimentar las métricas de calidad
+      if (isActualFQC && good > 0) {
+        const generatedLot = new Date().toISOString().slice(2,10).replace(/-/g,'') + '01';
+        await supabase.from('production_scrap').insert({
+          production_order_id: selectedOrderId,
+          routing_id: currentStep.routing_id,
+          defect_type: 'N/A',
+          quantity: good,
+          operator_name: formData.operator_name,
+          defect_comment: formData.adjustment_comment || 'Inspección FQC - Liberación Directa',
+          lot_number: formData.lot_number || generatedLot,
+          status: 'APROBADO'
         });
       }
 
