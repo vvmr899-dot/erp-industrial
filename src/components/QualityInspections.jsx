@@ -1010,12 +1010,6 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   };
 
   const handleQuickAction = async (id, disposition) => {
-    if (isMockData) {
-      setScrap(prev => prev.map(s => s.id === id ? { ...s, disposition } : s));
-      setAlert({ type: 'success', message: 'Actualizado (modo prueba)' });
-      setTimeout(() => setAlert(null), 2000);
-      return;
-    }
 
     const { error } = await supabase
       .from('production_scrap')
@@ -1037,13 +1031,6 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
     const item = scrap.find(s => s.id === id);
     if (!item) {
       setAlert({ type: 'error', message: 'No se encontró el registro de scrap' });
-      return;
-    }
-
-    if (isMockData) {
-      setScrap(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
-      setAlert({ type: 'success', message: 'Inspección guardada (modo prueba)' });
-      setTimeout(() => setAlert(null), 2000);
       return;
     }
 
@@ -1115,10 +1102,6 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   };
 
   const handleCreateInspection = async (scrapId, inspectionData) => {
-    if (isMockData) {
-      setScrap(prev => prev.map(s => s.id === scrapId ? { ...s, disposition: "Approved" } : s));
-      return;
-    }
 
     const { error } = await supabase
       .from('inspecciones')
@@ -1153,14 +1136,6 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   const confirmDeleteScrap = async () => {
     if (!itemToDelete) return;
     const id = itemToDelete.id;
-
-    if (isMockData) {
-      setScrap(prev => prev.filter(s => s.id !== id));
-      setAlert({ type: 'success', message: 'Registro eliminado (modo prueba)' });
-      setTimeout(() => setAlert(null), 2000);
-      setItemToDelete(null);
-      return;
-    }
 
     const { error } = await supabase
       .from('production_scrap')
