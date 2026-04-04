@@ -975,12 +975,7 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
     { id: "reporte", label: t.scrapReport || "Reporte Scrap", icon: "⚠" },
   ];
 
-  // Mock data for development
-  const MOCK_SCRAP = [
-    { id: "mock-1", created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), quantity: 3, defect_type: "Surface Scratch", defect_notes: "Rayado superficial", operator_name: "Juan Pérez", disposition: "Pending", order: { order_number: "OP-2025-049", part_numbers: { part_number: "9120-002", description: "BASE SENSOR" } }, routing: { operation_name: "Torneado CNC", sequence: 10 } },
-    { id: "mock-2", created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), quantity: 2, defect_type: "Out of Tolerance", defect_notes: "Fuera de tolerancia", operator_name: "María García", disposition: "Pending", order: { order_number: "OP-2025-050", part_numbers: { part_number: "7840-003", description: "ADAPTADOR" } }, routing: { operation_name: "Fresado CNC", sequence: 20 } },
-    { id: "mock-3", created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), quantity: 5, defect_type: "Porosity", defect_notes: "Porosidad", operator_name: "Pedro Sánchez", disposition: "Approved", order: { order_number: "OP-2025-048", part_numbers: { part_number: "9110-005", description: "BRIDA" } }, routing: { operation_name: "Fundición", sequence: 5 } },
-  ];
+  // MOCK_SCRAP removed for production
 
   const fetchScrap = async () => {
     setLoading(true);
@@ -996,17 +991,12 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        setScrap(data);
-        setIsMockData(false);
-      } else {
-        setScrap(MOCK_SCRAP);
-        setIsMockData(true);
-      }
+      setScrap(data || []);
+      setIsMockData(false);
     } catch (error) {
-      console.warn('Error loading from Supabase, using mock data:', error);
-      setScrap(MOCK_SCRAP);
-      setIsMockData(true);
+      console.warn('Error loading from Supabase:', error);
+      setScrap([]);
+      setIsMockData(false);
     }
     setLoading(false);
   };
