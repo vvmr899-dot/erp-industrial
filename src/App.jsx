@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { LanguageProvider, useLanguage } from './lib/translations';
 import Sidebar from './components/Sidebar';
-import ProductionOrders from './components/ProductionOrders';
-import ProductionWIP from './components/ProductionWIP';
-import ProductionCapture from './components/ProductionCapture';
-import Inventory from './components/Inventory';
-import Dashboard from './components/Dashboard';
-import PartNumbers from './components/PartNumbers';
-import ProductionRouting from './components/ProductionRouting';
-import UserManagement from './components/UserManagement';
-import Login from './components/Login';
-import QualityInspections from './components/QualityInspections';
+
+const ProductionOrders = lazy(() => import('./components/ProductionOrders'));
+const ProductionWIP = lazy(() => import('./components/ProductionWIP'));
+const ProductionCapture = lazy(() => import('./components/ProductionCapture'));
+const Inventory = lazy(() => import('./components/Inventory'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const PartNumbers = lazy(() => import('./components/PartNumbers'));
+const ProductionRouting = lazy(() => import('./components/ProductionRouting'));
+const UserManagement = lazy(() => import('./components/UserManagement'));
+const Login = lazy(() => import('./components/Login'));
+const QualityInspections = lazy(() => import('./components/QualityInspections'));
 
 function LanguageSelector() {
   const { lang, setLang, t } = useLanguage();
@@ -249,7 +250,9 @@ function AppContent() {
           </div>
         </div>
 
-        {renderContent()}
+        <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><div className="animate-spin text-primary">Cargando...</div></div>}>
+          {renderContent()}
+        </Suspense>
 
         {/* Modal Bloqueante de Alerta Crítica (Rechazos) */}
         {criticalAlerts.length > 0 && (
