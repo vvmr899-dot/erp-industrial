@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/translations';
 import { 
   ClipboardCheck, 
   User, 
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 
 const ProductionCapture = ({ userRole }) => {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [wipSteps, setWipSteps] = useState([]);
@@ -467,7 +469,7 @@ const fetchWIP = async (orderId) => {
 
             <div className="card-mesh" style={{ padding: '1.5rem' }}>
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label style={{ ...labelStyle, marginBottom: '0.5rem', display: 'block' }}>Orden de Producción</label>
+                <label style={{ ...labelStyle, marginBottom: '0.5rem', display: 'block' }}>{t.productionOrder}</label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <select 
                     value={selectedOrderId} 

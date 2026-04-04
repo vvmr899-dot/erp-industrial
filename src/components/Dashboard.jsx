@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/translations';
 import { 
   LayoutDashboard, Package, Activity, TrendingUp, AlertCircle,
   Clock, CheckCircle2, BarChart3, Cpu, RefreshCcw, ClipboardList, ShieldCheck, Truck
 } from 'lucide-react';
 
 const Dashboard = () => {
+  const { t } = useLanguage();
   const [stats, setStats] = useState({
     activeOrders: 0,
     wipTotal: 0,
@@ -216,16 +218,16 @@ const Dashboard = () => {
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-muted)', fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '0.65rem 1.25rem', borderRadius: '2rem', border: '1px solid var(--border)', backdropFilter: 'blur(10px)' }}>
             <Clock size={14} className="text-primary" />
-            <span>Último refresco: {lastRefresh.toLocaleTimeString()}</span>
+            <span>{t.lastRefresh}: {lastRefresh.toLocaleTimeString()}</span>
           </div>
         </div>
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
-        <KPICard title="Órdenes" value={stats.activeOrders} sub="Órdenes en piso hoy" icon={ClipboardList} color="var(--primary)" glow />
-        <KPICard title="Producción" value={stats.finishedToday} sub="Unidades terminadas hoy" icon={TrendingUp} color="var(--accent)" glow />
-        <KPICard title="WIP" value={stats.wipTotal} sub="Total piezas en tránsito" icon={Activity} color="#f59e0b" />
-        <KPICard title="Calidad" value={`${stats.scrapRate}%`} sub="Tasa de rechazo actual" icon={AlertCircle} color="var(--danger)" />
+        <KPICard title={t.dashboardOrders} value={stats.activeOrders} sub={t.ordersOnFloor} icon={ClipboardList} color="var(--primary)" glow />
+        <KPICard title={t.dashboardProduction} value={stats.finishedToday} sub={t.unitsFinishedToday} icon={TrendingUp} color="var(--accent)" glow />
+        <KPICard title={t.dashboardWip} value={stats.wipTotal} sub={t.totalInTransit} icon={Activity} color="#f59e0b" />
+        <KPICard title={t.dashboardQuality} value={`${stats.scrapRate}%`} sub={t.currentRejectionRate} icon={AlertCircle} color="var(--danger)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
@@ -233,7 +235,7 @@ const Dashboard = () => {
         <div className="card-mesh" style={{ padding: '2rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-               <BarChart3 size={20} className="text-primary" /> Distribución de Carga de Trabajo
+               <BarChart3 size={20} className="text-primary" /> {t.workDistribution}
              </h3>
           </div>
           {wipByArea.length > 0 ? (
@@ -284,17 +286,21 @@ const Dashboard = () => {
                 })}
               </div>
             </div>
-          ) : (
-            <div style={{ width: '100%', textAlign: 'center', color: 'var(--text-muted)', padding: '4rem' }}>
-              No hay datos de carga de trabajo
-            </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                {t.noMachineActivity}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
           )}
         </div>
 
         {/* Status Lists */}
         <div className="card-mesh" style={{ padding: '2rem' }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Cpu size={20} className="text-accent" /> Estado Activos Críticos
+            <Cpu size={20} className="text-accent" /> {t.criticalAssetsStatus}
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             {machineStatus.length > 0 ? machineStatus.map(asset => (
@@ -312,7 +318,7 @@ const Dashboard = () => {
                    <div style={{ width: `${asset.load}%`, height: '100%', background: asset.status === 'Activo' ? 'var(--accent)' : 'var(--text-muted)', boxShadow: `0 0 10px ${asset.status === 'Activo' ? 'var(--accent)' : 'transparent'}` }} />
                 </div>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                  {asset.inProcess} piezas en proceso
+                  {asset.inProcess} {t.piecesInProcess}
                 </div>
               </div>
             )) : (
