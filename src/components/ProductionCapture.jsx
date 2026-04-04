@@ -197,17 +197,49 @@ const fetchWIP = async (orderId) => {
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const currentStep = wipSteps.find(s => s.id === selectedStepId);
-  const isFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');
-  // Solo el rol de calidad (o admin) puede realizar capturas en operaciones FQC
-  const restrictedFQC = isFQC && userRole !== 'calidad' && userRole !== 'admin';
+  const fqcStep = wipSteps.find(s => s.operation_name?.toUpperCase().includes('FQC'));
+  
+  let captureRestricted = false;
+  let captureRestrictionMessage = "";
+  let captureRestrictionBadge = "";
+
+  if (currentStep) {
+    const isAdmin = userRole === 'admin' || userRole === 'administrador';
+    if (!isAdmin) {
+      const isFQC = currentStep.operation_name?.toUpperCase().includes('FQC');
+      const isBeforeFQC = fqcStep && currentStep.operation_sequence < fqcStep.operation_sequence;
+      const phase = isFQC ? 'FQC' : ((isBeforeFQC || !fqcStep) ? 'BEFORE' : 'AFTER');
+
+      if (phase === 'FQC') {
+         if (userRole !== 'produccion' && userRole !== 'calidad') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación FQC Restringida: Solo Producción o Calidad pueden liberar en esta estación.";
+            captureRestrictionBadge = "ESPERANDO LIBERACIÓN";
+         }
+      } else if (phase === 'BEFORE') {
+         if (userRole !== 'operador' && userRole !== 'supervisor') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación Restringida: Solo Operador y Supervisor pueden capturar en las estaciones previas a FQC.";
+            captureRestrictionBadge = "ACCIÓN NO PERMITIDA";
+         }
+      } else if (phase === 'AFTER') {
+         if (userRole !== 'almacen') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación Restringida: Solo Almacén tiene acceso para la captura en embalaje o envíos (después de FQC).";
+            captureRestrictionBadge = "ESPERANDO ALMACÉN";
+         }
+      }
+    }
+  }
+
   const totalAvailableForCapture = currentStep ? (parseFloat(currentStep.quantity_available) + parseFloat(currentStep.quantity_in_process)) : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!currentStep) return;
 
-    if (restrictedFQC) {
-      alert("Esta operación requiere liberación de Calidad (FQC). Por favor solicita el apoyo del personal de calidad.");
+    if (captureRestricted) {
+      alert(captureRestrictionMessage);
       return;
     }
 
@@ -428,7 +460,7 @@ const fetchWIP = async (orderId) => {
             {selectedStepId ? (
               <div className="card-mesh" style={{ padding: '2rem' }}>
                 <form onSubmit={handleSubmit}>
-                  {restrictedFQC && (
+                  {captureRestricted && (
                     <div style={{ 
                       background: 'rgba(239, 68, 68, 0.1)', 
                       border: '1px solid var(--danger)', 
@@ -441,7 +473,7 @@ const fetchWIP = async (orderId) => {
                     }}>
                       <AlertCircle size={20} color="var(--danger)" />
                       <div style={{ fontSize: '0.9rem', color: 'var(--danger)', fontWeight: 600 }}>
-                        Operación FQC Restringida: Solicitar liberación al departamento de Calidad.
+                        {captureRestrictionMessage}
                       </div>
                     </div>
                   )}
@@ -584,8 +616,15 @@ const fetchWIP = async (orderId) => {
                         setReturnQty(0);
                         setShowReturnModal(true);
                       }}
-                      style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
-                      disabled={!selectedStepId || submitting}
+                      style={{ 
+                        flex: 1, 
+                        background: 'rgba(239, 68, 68, 0.1)', 
+                        border: '1px solid var(--danger)', 
+                        color: 'var(--danger)',
+                        opacity: (!selectedStepId || submitting || captureRestricted) ? 0.5 : 1,
+                        cursor: (!selectedStepId || submitting || captureRestricted) ? 'not-allowed' : 'pointer'
+                      }}
+                      disabled={!selectedStepId || submitting || captureRestricted}
                     >
                       Regresar WIP
                     </button>
@@ -600,12 +639,12 @@ const fetchWIP = async (orderId) => {
                       fontSize: '1.1rem', 
                       fontWeight: '700', 
                       borderRadius: '12px',
-                      opacity: restrictedFQC ? 0.5 : 1,
-                      cursor: restrictedFQC ? 'not-allowed' : 'pointer'
+                      opacity: captureRestricted ? 0.5 : 1,
+                      cursor: captureRestricted ? 'not-allowed' : 'pointer'
                     }}
-                    disabled={submitting || restrictedFQC}
+                    disabled={submitting || captureRestricted}
                   >
-                    {submitting ? <Loader2 className="animate-spin" /> : <>{restrictedFQC ? <CheckCircle2 size={20} /> : <Save size={20} />} {restrictedFQC ? "ESPERANDO LIBERACIÓN FQC" : "Registrar Producción"}</>}
+                    {submitting ? <Loader2 className="animate-spin" /> : <>{captureRestricted ? <CheckCircle2 size={20} /> : <Save size={20} />} {captureRestricted ? captureRestrictionBadge : "Registrar Producción"}</>}
                   </button>
                 </form>
               </div>
