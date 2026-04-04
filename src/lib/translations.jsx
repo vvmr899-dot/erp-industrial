@@ -166,7 +166,6 @@ export const translations = {
     damagedMaterial: "Material dañado",
     selectOperationFirst: "-- Seleccionar --",
     operationHistory: "Historial de Operación",
-    close: "Cerrar",
     returnWip: "Regresar WIP",
     confirmReturn: "Confirmar Regreso",
     returnWipMessage: "Esta acción restará WIP de la operación",
@@ -187,14 +186,12 @@ export const translations = {
     ordersDescription: "Gestión y seguimiento de trabajos en planta.",
     noOrdersFound: "No hay órdenes registradas.",
     noOrdersWithFilters: "No se encontraron órdenes con los filtros aplicados.",
-    newOrder: "Nueva Orden",
     editProductionOrder: "Editar Orden de Producción",
     orderActive: "Orden Activa",
     orderInactive: "Orden Inactiva",
     activeProductionEnabled: "(Producción Habilitada)",
     productionBlocked: "(Producción Bloqueada)",
     orderUpdated: "Orden actualizada con éxito",
-    orderCreated: "Orden creada con éxito",
     orderDeleted: "Orden eliminada",
     
     // Routing
