@@ -88,10 +88,14 @@ function AppContent() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'production_scrap' },
         (payload) => {
-          const qty = payload.new.quantity;
-          const defect = payload.new.defect_type || "No especificado";
-          // Dispara pantalla de bloqueo (Critical Alert)
-          setCriticalAlerts(prev => [...prev, { id: Date.now(), qty, defect }]);
+          const newRecord = payload.new;
+          const qty = newRecord.quantity;
+          const defect = newRecord.defect_type || "No especificado";
+          const status = newRecord.status || '';
+          // Solo dispara pantalla de bloqueo si es RECHAZADO o Pendiente (no APROBADO)
+          if (status !== 'APROBADO') {
+            setCriticalAlerts(prev => [...prev, { id: Date.now(), qty, defect }]);
+          }
         }
       )
       .subscribe();

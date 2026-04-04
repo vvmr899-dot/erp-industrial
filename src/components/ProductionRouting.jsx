@@ -30,7 +30,6 @@ const ProductionRouting = ({ userRole }) => {
     part_number_id: '',
     sequence: '',
     operation_name: '',
-    operation_code: '',
     machine_area: '',
     work_center: '',
     standard_time_minutes: '',
@@ -56,7 +55,9 @@ const ProductionRouting = ({ userRole }) => {
       .from('production_routing')
       .select('*, part_numbers(part_number, description)')
       .order('part_number_id')
-      .order('sequence');
+      .order('sequence_base', { nullsFirst: false })
+      .order('sequence_sub', { nullsFirst: true })
+      .order('sequence', { nullsFirst: false });
     
     if (filterPartId) {
       query = query.eq('part_number_id', filterPartId);
@@ -75,11 +76,20 @@ const ProductionRouting = ({ userRole }) => {
     e.preventDefault();
     setLoading(true);
 
+    const rawSeq = String(formData.sequence).trim();
+    const parts = rawSeq.split('-');
+    const base = parseInt(parts[0], 10) || 0;
+    const sub = parts.length > 1 ? parseInt(parts[1], 10) || 0 : null;
+    const finalStr = sub ? `${base}-${sub}` : `${base}`;
+
     const dataToSave = {
       ...formData,
-      sequence: parseInt(formData.sequence),
-      standard_time_minutes: parseFloat(formData.standard_time_minutes),
-      setup_time_minutes: parseFloat(formData.setup_time_minutes)
+      sequence: base,
+      sequence_base: base,
+      sequence_sub: sub,
+      sequence_str: finalStr,
+      standard_time_minutes: parseFloat(formData.standard_time_minutes) || 0,
+      setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0
     };
 
     if (editingId) {
@@ -101,9 +111,8 @@ const ProductionRouting = ({ userRole }) => {
     setEditingId(routing.id);
     setFormData({
       part_number_id: routing.part_number_id,
-      sequence: routing.sequence,
+      sequence: routing.sequence_str || routing.sequence,
       operation_name: routing.operation_name,
-      operation_code: routing.operation_code || '',
       machine_area: routing.machine_area,
       work_center: routing.work_center || '',
       standard_time_minutes: routing.standard_time_minutes,
@@ -163,8 +172,10 @@ const ProductionRouting = ({ userRole }) => {
     const newSteps = sourceSteps.map(step => ({
       part_number_id: copyModal.targetPartId,
       sequence: step.sequence,
+      sequence_base: step.sequence_base,
+      sequence_sub: step.sequence_sub,
+      sequence_str: step.sequence_str,
       operation_name: step.operation_name,
-      operation_code: step.operation_code,
       machine_area: step.machine_area,
       work_center: step.work_center,
       standard_time_minutes: step.standard_time_minutes,
@@ -190,7 +201,6 @@ const ProductionRouting = ({ userRole }) => {
       part_number_id: '',
       sequence: '',
       operation_name: '',
-      operation_code: '',
       machine_area: '',
       work_center: '',
       standard_time_minutes: '',
@@ -294,10 +304,9 @@ const ProductionRouting = ({ userRole }) => {
                   <tbody>
                     {group.steps.map(step => (
                       <tr key={step.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }}>
-                        <td style={{ padding: '1rem', fontWeight: '800' }}>{step.sequence}</td>
+                        <td style={{ padding: '1rem', fontWeight: '800' }}>{step.sequence_str || step.sequence}</td>
                         <td style={{ padding: '1rem' }}>
                           <div style={{ fontWeight: '600' }}>{step.operation_name}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{step.operation_code}</div>
                         </td>
                         <td style={{ padding: '1rem' }}>{step.machine_area}</td>
                         <td style={{ padding: '1rem' }}>{step.standard_time_minutes}</td>
@@ -365,23 +374,14 @@ const ProductionRouting = ({ userRole }) => {
                   ))}
                 </select>
               </div>
-              <div className="form-group">
-                <label>Secuencia (10, 20...)</label>
-                <input 
-                  type="number" 
-                  required
-                  step="10"
-                  value={formData.sequence}
-                  onChange={(e) => setFormData({...formData, sequence: e.target.value})}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Código Op</label>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Secuencia (Ej. 20, 20-1, 20-2)</label>
                 <input 
                   type="text" 
-                  value={formData.operation_code}
-                  onChange={(e) => setFormData({...formData, operation_code: e.target.value})}
+                  required
+                  placeholder="20, 20-1"
+                  value={formData.sequence}
+                  onChange={(e) => setFormData({...formData, sequence: e.target.value})}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
                 />
               </div>

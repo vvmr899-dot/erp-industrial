@@ -45,16 +45,55 @@ const ProductionWIP = ({ userRole }) => {
     }
     setLoading(true);
     setError(null);
-    const { data, error: err } = await supabase
+    const { data: wipData, error: err } = await supabase
       .from('production_wip_balance')
       .select('*')
-      .eq('production_order_id', orderId)
-      .order('operation_sequence');
+      .eq('production_order_id', orderId);
     
     if (err) {
       setError("Error al cargar WIP: " + err.message);
-    } else if (data) {
-      setWipSteps(data);
+    } else if (wipData && wipData.length > 0) {
+      const routingIds = wipData.map(w => w.routing_id).filter(Boolean);
+      let routingData = [];
+      
+      if (routingIds.length > 0) {
+        const { data: rData } = await supabase
+          .from('production_routing')
+          .select('id, sequence, sequence_base, sequence_sub, sequence_str, operation_name, machine_area, work_center, is_final_operation')
+          .in('id', routingIds);
+        routingData = rData || [];
+      }
+      
+      const routingMap = {};
+      routingData.forEach(r => { routingMap[r.id] = r; });
+      
+      const merged = wipData.map(w => {
+        const routing = routingMap[w.routing_id];
+        if (routing) {
+          return {
+            ...w,
+            operation_name: routing.operation_name,
+            machine_area: routing.machine_area,
+            work_center: routing.work_center,
+            is_final_operation: routing.is_final_operation,
+            sequence_base: routing.sequence_base,
+            sequence_sub: routing.sequence_sub,
+            sequence_str: routing.sequence_str,
+            operation_sequence: routing.sequence
+          };
+        }
+        return w;
+      });
+      
+      const sorted = [...merged].sort((a, b) => {
+        const aBase = a.sequence_base ?? a.operation_sequence;
+        const bBase = b.sequence_base ?? b.operation_sequence;
+        if (aBase !== bBase) return aBase - bBase;
+        return (a.sequence_sub || 0) - (b.sequence_sub || 0);
+      });
+      setWipSteps(sorted);
+    } else {
+      setWipSteps([]);
     }
     setLoading(false);
   };
@@ -146,7 +185,7 @@ const ProductionWIP = ({ userRole }) => {
                       const stepTotal = step.quantity_available + step.quantity_in_process + (step.quantity_completed || 0);
                       const width = total > 0 ? (stepTotal / total) * 100 : 0;
                       return (
-                        <div key={step.id} style={{ width: `${width}%`, height: '100%', background: 'var(--primary)', opacity: 0.3 + (width/100), transition: 'width 0.5s ease' }} title={`Step ${step.operation_sequence}: ${stepTotal} units`} />
+                        <div key={step.id} style={{ width: `${width}%`, height: '100%', background: 'var(--primary)', opacity: 0.3 + (width/100), transition: 'width 0.5s ease' }} title={`Step ${step.sequence_str || step.operation_sequence}: ${stepTotal} units`} />
                       );
                     })}
                 </div>
@@ -175,7 +214,7 @@ const ProductionWIP = ({ userRole }) => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                           <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', width: '2rem', height: '2rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '800' }}>
-                            {step.operation_sequence}
+                            {step.sequence_str || step.operation_sequence}
                           </div>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

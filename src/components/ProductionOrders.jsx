@@ -45,7 +45,7 @@ const ProductionOrders = ({ userRole }) => {
         part_numbers (part_number, description),
         wip_balances:production_wip_balance(
           quantity_available,
-          routing:production_routing(sequence)
+          routing:production_routing(sequence, sequence_base, sequence_sub)
         )
       `)
       .order('created_at', { ascending: false });
@@ -74,7 +74,12 @@ const ProductionOrders = ({ userRole }) => {
         // Sequential progress logic:
         // Sum of all good pieces reported at each step.
         // A piece is "complete" for step i if it's in step i+1 or beyond.
-        const steps = [...order.wip_balances].sort((a,b) => a.routing.sequence - b.routing.sequence);
+        const steps = [...order.wip_balances].sort((a,b) => {
+          const aBase = a.routing?.sequence_base ?? a.routing?.sequence ?? 0;
+          const bBase = b.routing?.sequence_base ?? b.routing?.sequence ?? 0;
+          if (aBase !== bBase) return aBase - bBase;
+          return (a.routing?.sequence_sub ?? 0) - (b.routing?.sequence_sub ?? 0);
+        });
         
         let totalOperationCompletions = 0;
         for (let i = 0; i < totalSteps; i++) {

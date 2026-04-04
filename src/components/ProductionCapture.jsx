@@ -31,6 +31,7 @@ const ProductionCapture = ({ userRole }) => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [completedQty, setCompletedQty] = useState(0);
+  const [toast, setToast] = useState(null);
   
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -102,14 +103,72 @@ const ProductionCapture = ({ userRole }) => {
 
 const fetchWIP = async (orderId) => {
     setLoading(true);
-    const { data } = await supabase
-      .from('production_wip_balance')
-      .select('*')
-      .eq('production_order_id', orderId);
+    console.log('[fetchWIP] Iniciando para orderId:', orderId);
     
-    if (data) {
-      const sorted = [...data].sort((a, b) => a.operation_sequence - b.operation_sequence);
-      setWipSteps(sorted);
+    const { data: orderData } = await supabase
+      .from('production_orders')
+      .select('id, part_number_id')
+      .eq('id', orderId)
+      .single();
+    
+    if (!orderData) {
+      setLoading(false);
+      return;
+    }
+    
+    console.log('[fetchWIP] Order part_number_id:', orderData.part_number_id);
+    
+    const { data: routingData } = await supabase
+      .from('production_routing')
+      .select('id, sequence, sequence_base, sequence_sub, sequence_str, operation_name, machine_area, work_center, is_final_operation')
+      .eq('part_number_id', orderData.part_number_id)
+      .order('sequence_base', { nullsFirst: false })
+      .order('sequence_sub', { nullsFirst: true })
+      .order('sequence', { nullsFirst: false });
+    
+    console.log('[fetchWIP] Routing actual desde DB:', routingData);
+    
+    if (routingData && routingData.length > 0) {
+      const { data: wipData } = await supabase
+        .from('production_wip_balance')
+        .select('*')
+        .eq('production_order_id', orderId);
+      
+      const wipMap = {};
+      if (wipData) {
+        wipData.forEach(w => { wipMap[w.routing_id] = w; });
+      }
+      
+      const merged = routingData.map(r => {
+        const existingWip = wipMap[r.id];
+        if (existingWip) {
+          return {
+            ...existingWip,
+            operation_name: r.operation_name,
+            machine_area: r.machine_area,
+            work_center: r.work_center,
+            is_final_operation: r.is_final_operation,
+            sequence_base: r.sequence_base,
+            sequence_sub: r.sequence_sub,
+            sequence_str: r.sequence_str,
+            operation_sequence: r.sequence
+          };
+        }
+        return {
+          id: `new-${r.id}`,
+          production_order_id: orderId,
+          routing_id: r.id,
+          quantity_available: 0,
+          quantity_in_process: 0,
+          status: 'Pendiente',
+          ...r
+        };
+      });
+      
+      console.log('[fetchWIP] Resultado final merged:', merged.map(s => ({ id: s.id, operation_name: s.operation_name, routing_id: s.routing_id })));
+      setWipSteps(merged);
+    } else {
+      setWipSteps([]);
     }
     setLoading(false);
   };
@@ -207,7 +266,12 @@ const fetchWIP = async (orderId) => {
     const isAdmin = userRole === 'admin' || userRole === 'administrador';
     if (!isAdmin) {
       const isFQC = currentStep.operation_name?.toUpperCase().includes('FQC');
-      const isBeforeFQC = fqcStep && currentStep.operation_sequence < fqcStep.operation_sequence;
+      let isBeforeFQC = false;
+      if (fqcStep) {
+        const curVal = (currentStep.sequence_base ?? currentStep.operation_sequence) + ((currentStep.sequence_sub || 0) / 100);
+        const fqcVal = (fqcStep.sequence_base ?? fqcStep.operation_sequence) + ((fqcStep.sequence_sub || 0) / 100);
+        isBeforeFQC = curVal < fqcVal;
+      }
       const phase = isFQC ? 'FQC' : ((isBeforeFQC || !fqcStep) ? 'BEFORE' : 'AFTER');
 
       if (phase === 'FQC') {
@@ -311,11 +375,13 @@ const fetchWIP = async (orderId) => {
       setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '', lot_number: '' });
       fetchWIP(selectedOrderId);
       fetchOrderDetails(selectedOrderId);
-      alert('Transacción completada exitosamente.');
+      setToast({ type: 'success', message: 'Transacción completada exitosamente.' });
+      setTimeout(() => setToast(null), 3000);
 
     } catch (err) {
       console.error(err);
-      alert("Error en la transacción: " + err.message);
+      setToast({ type: 'error', message: 'Error en la transacción: ' + err.message });
+      setTimeout(() => setToast(null), 3000);
     } finally {
       setSubmitting(false);
     }
@@ -402,16 +468,33 @@ const fetchWIP = async (orderId) => {
             <div className="card-mesh" style={{ padding: '1.5rem' }}>
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                 <label style={{ ...labelStyle, marginBottom: '0.5rem', display: 'block' }}>Orden de Producción</label>
-                <select 
-                  value={selectedOrderId} 
-                  onChange={(e) => setSelectedOrderId(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                >
-                  <option value="">-- Buscar Orden --</option>
-                  {orders.map(o => (
-                    <option key={o.id} value={o.id}>{o.order_number} - {o.part_numbers?.part_number}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select 
+                    value={selectedOrderId} 
+                    onChange={(e) => setSelectedOrderId(e.target.value)}
+                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                  >
+                    <option value="">-- Buscar Orden --</option>
+                    {orders.map(o => (
+                      <option key={o.id} value={o.id}>{o.order_number} - {o.part_numbers?.part_number}</option>
+                    ))}
+                  </select>
+                  {selectedOrderId && (
+                    <button 
+                      type="button"
+                      onClick={() => { 
+                        fetchWIP(selectedOrderId); 
+                        fetchOrderDetails(selectedOrderId); 
+                        setToast({ type: 'success', message: 'Ruta sincronizada correctamente' });
+                        setTimeout(() => setToast(null), 3000);
+                      }}
+                      style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#1f2937', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      title="Sincronizar ruta"
+                    >
+                      <RefreshCcw size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {selectedOrderId && (
@@ -446,8 +529,8 @@ const fetchWIP = async (orderId) => {
                   <option value="">-- Seleccionar Operación --</option>
                   {wipSteps.map(s => (
                     <option key={s.id} value={s.id}>
-                      OP {s.operation_sequence} - {s.operation_name} ({parseFloat(s.quantity_available) + parseFloat(s.quantity_in_process)} disp)
-                    </option>
+                    OP {s.sequence_str || s.operation_sequence} - {s.operation_name} ({parseFloat(s.quantity_available) + parseFloat(s.quantity_in_process)} disp)
+                  </option>
                   ))}
                 </select>
               </div>
@@ -722,7 +805,7 @@ const fetchWIP = async (orderId) => {
                           fontSize: '0.9rem',
                           fontWeight: '800'
                         }}>
-                          {step.operation_sequence}
+                          {step.sequence_str || step.operation_sequence}
                         </div>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -969,6 +1052,24 @@ const fetchWIP = async (orderId) => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          background: toast.type === 'success' ? '#10B981' : '#EF4444',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          zIndex: 9999,
+          fontWeight: 600,
+          animation: 'slideIn 0.3s ease'
+        }}>
+          {toast.message}
         </div>
       )}
     </div>

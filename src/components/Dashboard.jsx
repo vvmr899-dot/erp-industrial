@@ -10,60 +10,150 @@ const Dashboard = () => {
     activeOrders: 0,
     wipTotal: 0,
     finishedToday: 0,
+    scrapToday: 0,
     scrapRate: 0,
-    efficiency: 92,
-    machineUtilization: 75
+    efficiency: 0,
+    machineUtilization: 0
   });
   const [activeOrders, setActiveOrders] = useState([]);
   const [wipByArea, setWipByArea] = useState([]);
-  const [machines, setMachines] = useState([]);
+  const [machineStatus, setMachineStatus] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   const fetchDashboardData = async () => {
-    setLoading(false);
+    setLoading(true);
     
     try {
-      // 1. KPIs Basics
-      const { data: orders } = await supabase.from('production_orders').select('status');
+      const today = new Date().toISOString().split('T')[0];
+      const startOfDay = today + 'T00:00:00.000Z';
+      const endOfDay = today + 'T23:59:59.999Z';
+
+      // 1. Órdenes Activas
+      const { data: orders } = await supabase.from('production_orders').select('status').eq('is_active', true);
       const active = orders?.filter(o => ['Liberada', 'En Proceso'].includes(o.status)).length || 0;
 
+      // 2. WIP Total
       const { data: wip } = await supabase.from('production_wip_balance').select('quantity_available, quantity_in_process');
-      const wipSum = wip?.reduce((acc, curr) => acc + (curr.quantity_in_process || 0) + (curr.quantity_available || 0), 0) || 0;
-      
-      const today = new Date().toISOString().split('T')[0];
-      const { data: trans } = await supabase.from('wip_transactions').select('transaction_type, quantity').gte('created_at', today);
-      
-      const finishedToday = trans?.filter(t => t.transaction_type === 'PRODUCTION').reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0) || 0;
-      const scrapToday = trans?.filter(t => t.transaction_type === 'SCRAP').reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0) || 0;
-      const rate = (finishedToday + scrapToday) > 0 ? (scrapToday / (finishedToday + scrapToday)) * 100 : 0;
+      const wipSum = wip?.reduce((acc, curr) => acc + (parseFloat(curr.quantity_in_process) || 0) + (parseFloat(curr.quantity_available) || 0), 0) || 0;
 
-      // 2. Active Orders
+      // 3. Terminados Hoy (de inventory_transactions - Finished Goods)
+      const { data: finishedData } = await supabase
+        .from('inventory_transactions')
+        .select('quantity')
+        .eq('transaction_type', 'FINISHED_GOODS_RECEIPT')
+        .gte('created_at', startOfDay);
+      const finishedToday = finishedData?.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0) || 0;
+
+      // 4. Scrap Total (de production_scrap con status RECHAZADO o Pendiente)
+      let scrapToday = 0;
+      try {
+        const { data: scrapData } = await supabase
+          .from('production_scrap')
+          .select('quantity');
+        if (scrapData && scrapData.length > 0) {
+          scrapToday = scrapData.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
+        }
+      } catch (e) {
+        console.log('Sin datos de scrap o error:', e);
+      }
+
+      // 5. Tasa de Scrap
+      const totalProduced = finishedToday + scrapToday;
+      const rate = totalProduced > 0 ? Math.round((scrapToday / totalProduced) * 10) / 10 : 0;
+
+      // 6. Eficiencia (basado en operaciones completadas vs planificado)
+      const { data: allOrders } = await supabase.from('production_orders').select('quantity_planned');
+      const totalPlanned = allOrders?.reduce((acc, o) => acc + (parseFloat(o.quantity_planned) || 0), 0) || 0;
+      const efficiency = totalPlanned > 0 ? Math.round((finishedToday / totalPlanned) * 100) : 0;
+
+      // 7. Utilización de máquinas (basado en operaciones en proceso)
+      const { data: inProcessData } = await supabase
+        .from('production_wip_balance')
+        .select('quantity_in_process')
+        .gt('quantity_in_process', 0);
+      const machinesWithWork = inProcessData?.length || 0;
+      const totalMachines = await supabase.from('production_routing').select('work_center', { count: 'exact', head: true });
+      const machineUtilization = totalMachines.count > 0 ? Math.round((machinesWithWork / Math.min(totalMachines.count, 20)) * 100) : 0;
+
+      // 8. Órdenes Activas con Detalle
       const { data: activeOrdersData } = await supabase
         .from('production_orders')
-        .select(`
-          order_number, quantity_planned,
-          part_numbers(part_number)
-        `)
+        .select('id, order_number, quantity_planned, status, created_at, part_numbers(part_number, description)')
         .in('status', ['En Proceso', 'Liberada'])
-        .limit(5);
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      // 9. WIP por Área
+      const { data: wipAreas } = await supabase
+        .from('production_wip_balance')
+        .select('quantity_available, quantity_in_process, routing_id')
+        .gt('quantity_available', 0);
+      
+      const areaMap = {};
+      for (const w of (wipAreas || [])) {
+        const { data: routing } = await supabase.from('production_routing').select('machine_area').eq('id', w.routing_id).single();
+        const area = routing?.machine_area || 'Sin área';
+        if (!areaMap[area]) areaMap[area] = 0;
+        areaMap[area] += parseFloat(w.quantity_available) || 0;
+      }
+      const wipByAreaData = Object.entries(areaMap).map(([area, qty]) => ({ area, qty })).slice(0, 5);
+
+      // 10. Estado de Máquinas/Activos desde production_routing
+      const { data: routingData } = await supabase
+        .from('production_routing')
+        .select('id, work_center, machine_area, operation_name, is_final_operation')
+        .not('work_center', 'is', null)
+        .order('machine_area');
+      
+      const { data: wipData } = await supabase
+        .from('production_wip_balance')
+        .select('routing_id, quantity_in_process');
+      
+      const wipByRouting = {};
+      wipData?.forEach(w => { wipByRouting[w.routing_id] = parseFloat(w.quantity_in_process) || 0; });
+      
+      const machineMap = {};
+      routingData?.forEach(r => {
+        const key = r.work_center || r.machine_area || 'Sin asignar';
+        if (!machineMap[key]) {
+          machineMap[key] = { 
+            id: key, 
+            name: r.operation_name || key, 
+            area: r.machine_area || 'General',
+            inProcess: 0 
+          };
+        }
+        machineMap[key].inProcess += wipByRouting[r.id] || 0;
+      });
+      
+      const machineStatusData = Object.values(machineMap)
+        .map(m => ({
+          ...m,
+          status: m.inProcess > 0 ? 'Activo' : 'Inactivo',
+          load: Math.min(Math.round((m.inProcess / 100) * 100), 100)
+        }))
+        .sort((a, b) => b.inProcess - a.inProcess)
+        .slice(0, 6);
 
       setStats({
         activeOrders: active,
         wipTotal: wipSum,
         finishedToday: finishedToday,
+        scrapToday: scrapToday,
         scrapRate: Math.round(rate * 10) / 10,
-        efficiency: 92,
-        machineUtilization: 78
+        efficiency: Math.min(efficiency, 100),
+        machineUtilization: Math.min(machineUtilization, 100)
       });
       
       setActiveOrders(activeOrdersData || []);
+      setWipByArea(wipByAreaData);
+      setMachineStatus(machineStatusData);
       setLastRefresh(new Date());
     } catch (e) {
       console.error(e);
@@ -115,9 +205,19 @@ const Dashboard = () => {
           <h1 className="display-small">Resumen de Operaciones</h1>
           <p className="text-muted">Estado actual de la planta en tiempo real.</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-muted)', fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '0.65rem 1.25rem', borderRadius: '2rem', border: '1px solid var(--border)', backdropFilter: 'blur(10px)' }}>
-          <Clock size={14} className="text-primary" />
-          <span>Último refresco: {lastRefresh.toLocaleTimeString()}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button 
+            onClick={fetchDashboardData}
+            disabled={loading}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid var(--primary)', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+          >
+            <RefreshCcw size={14} className={loading ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-muted)', fontSize: '0.75rem', background: 'rgba(255,255,255,0.03)', padding: '0.65rem 1.25rem', borderRadius: '2rem', border: '1px solid var(--border)', backdropFilter: 'blur(10px)' }}>
+            <Clock size={14} className="text-primary" />
+            <span>Último refresco: {lastRefresh.toLocaleTimeString()}</span>
+          </div>
         </div>
       </header>
 
@@ -128,42 +228,67 @@ const Dashboard = () => {
         <KPICard title="Calidad" value={`${stats.scrapRate}%`} sub="Tasa de rechazo actual" icon={AlertCircle} color="var(--danger)" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '2rem', marginBottom: '2rem' }}>
-        {/* Main Chart Card */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+        {/* Main Chart Card - Donut Chart */}
         <div className="card-mesh" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                <BarChart3 size={20} className="text-primary" /> Distribución de Carga de Trabajo
              </h3>
-             <div style={{ display: 'flex', gap: '0.5rem' }}>
-               <div className="badge badge-info" style={{ fontSize: '0.6rem' }}>EN PROCESO</div>
-             </div>
           </div>
-          <div style={{ height: '280px', display: 'flex', alignItems: 'flex-end', gap: '2rem', padding: '1rem 0', borderBottom: '1px solid var(--border)' }}>
-            {/* Synthetic Data Visual for Bars */}
-            {[
-              { label: 'Maquinado', val: 85 },
-              { label: 'Ensamble', val: 45 },
-              { label: 'Calidad', val: 65 },
-              { label: 'Pintura', val: 30 },
-              { label: 'Empaque', val: 55 }
-            ].map(b => (
-              <div key={b.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                <div style={{ 
-                  width: '100%', 
-                  height: `${b.val * 2}px`, 
-                  background: 'linear-gradient(to top, var(--primary), #818cf8)',
-                  borderRadius: '12px 12px 4px 4px',
-                  boxShadow: '0 4px 20px rgba(99, 102, 241, 0.4)',
-                  position: 'relative',
-                  transition: 'height 1s cubic-bezier(0.4, 0, 0.2, 1)'
-                }}>
-                  <div style={{ position: 'absolute', top: '-25px', width: '100%', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#fff' }}>{b.val}</div>
+          {wipByArea.length > 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '3rem' }}>
+              <div style={{ position: 'relative', width: '200px', height: '200px' }}>
+                <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                  {(() => {
+                    const total = wipByArea.reduce((acc, b) => acc + b.qty, 0);
+                    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+                    let cumulative = 0;
+                    return wipByArea.map((b, i) => {
+                      const percent = (b.qty / total) * 100;
+                      const dashArray = `${percent} ${100 - percent}`;
+                      const dashOffset = -cumulative;
+                      cumulative += percent;
+                      return (
+                        <circle 
+                          key={b.area} 
+                          cx="50" cy="50" r="40" 
+                          fill="none" 
+                          stroke={colors[i % colors.length]} 
+                          strokeWidth="20"
+                          strokeDasharray={dashArray}
+                          strokeDashoffset={dashOffset}
+                          style={{ transition: 'all 0.5s ease' }}
+                        />
+                      );
+                    });
+                  })()}
+                </svg>
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{wipByArea.reduce((acc, b) => acc + b.qty, 0)}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Total WIP</div>
                 </div>
-                <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{b.label}</span>
               </div>
-            ))}
-          </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {wipByArea.map((b, i) => {
+                  const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+                  const total = wipByArea.reduce((acc, x) => acc + x.qty, 0);
+                  const percent = Math.round((b.qty / total) * 100);
+                  return (
+                    <div key={b.area} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: colors[i % colors.length] }} />
+                      <span style={{ flex: 1, fontSize: '0.8rem', fontWeight: 600 }}>{b.area}</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{b.qty} ({percent}%)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ width: '100%', textAlign: 'center', color: 'var(--text-muted)', padding: '4rem' }}>
+              No hay datos de carga de trabajo
+            </div>
+          )}
         </div>
 
         {/* Status Lists */}
@@ -172,27 +297,29 @@ const Dashboard = () => {
             <Cpu size={20} className="text-accent" /> Estado Activos Críticos
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            {[
-              { id: 'CNC-01', name: 'Haas VF-2', status: 'Active', load: 88, color: 'var(--accent)' },
-              { id: 'ASM-04', name: 'Manual Line 4', status: 'Active', load: 72, color: 'var(--accent)' },
-              { id: 'QUAL-01', name: 'CMM Bridge', status: 'Maintenance', load: 0, color: 'var(--warning)' },
-              { id: 'PKG-02', name: 'Auto-Bagger', status: 'Idle', load: 15, color: 'var(--text-muted)' }
-            ].map(asset => (
+            {machineStatus.length > 0 ? machineStatus.map(asset => (
               <div key={asset.id} style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.02)', borderRadius: '1rem', border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <div>
                     <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{asset.id}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{asset.name}</div>
                   </div>
-                  <div className="badge" style={{ background: `${asset.color}15`, color: asset.color, border: `1px solid ${asset.color}30` }}>
+                  <div className="badge" style={{ background: `${asset.status === 'Activo' ? 'var(--accent)' : 'var(--text-muted)'}15`, color: asset.status === 'Activo' ? 'var(--accent)' : 'var(--text-muted)', border: `1px solid ${asset.status === 'Activo' ? 'var(--accent)' : 'var(--text-muted)'}30` }}>
                     {asset.status.toUpperCase()}
                   </div>
                 </div>
                 <div style={{ height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '2px', overflow: 'hidden' }}>
-                   <div style={{ width: `${asset.load}%`, height: '100%', background: asset.color, boxShadow: `0 0 10px ${asset.color}` }} />
+                   <div style={{ width: `${asset.load}%`, height: '100%', background: asset.status === 'Activo' ? 'var(--accent)' : 'var(--text-muted)', boxShadow: `0 0 10px ${asset.status === 'Activo' ? 'var(--accent)' : 'transparent'}` }} />
+                </div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                  {asset.inProcess} piezas en proceso
                 </div>
               </div>
-            ))}
+            )) : (
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                No hay máquinas con actividad reciente
+              </div>
+            )}
           </div>
         </div>
       </div>
