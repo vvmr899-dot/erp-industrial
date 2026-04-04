@@ -33,10 +33,12 @@ const ProductDetail = ({ item, onClose }) => {
         .limit(30),
       supabase
         .from('production_routing')
-        .select('sequence, operation_name, machine_area, standard_time_minutes, setup_time_minutes, is_final_operation')
+        .select('sequence, sequence_str, sequence_base, sequence_sub, operation_name, machine_area, standard_time_minutes, setup_time_minutes, is_final_operation')
         .eq('part_number_id', partId)
         .eq('active', true)
-        .order('sequence'),
+        .order('sequence_base', { nullsFirst: false })
+        .order('sequence_sub', { nullsFirst: true })
+        .order('sequence', { nullsFirst: false }),
     ]).then(([o, t, r]) => {
       setOrders(o.data || []);
       setTransactions(t.data || []);
@@ -282,7 +284,7 @@ const ProductDetail = ({ item, onClose }) => {
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '0.7rem', fontWeight: '800',
                             color: r.is_final_operation ? 'var(--accent)' : 'var(--primary)',
-                          }}>{r.sequence}</div>
+                          }}>{r.sequence_str || r.sequence}</div>
                           {i < routing.length - 1 && (
                             <div style={{ width: '2px', height: '24px', background: 'var(--border)' }} />
                           )}

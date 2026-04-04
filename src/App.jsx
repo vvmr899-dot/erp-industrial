@@ -2,6 +2,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { LanguageProvider, useLanguage } from './lib/translations';
 import Sidebar from './components/Sidebar';
+import { Layout } from 'lucide-react';
 
 const ProductionOrders = lazy(() => import('./components/ProductionOrders'));
 const ProductionWIP = lazy(() => import('./components/ProductionWIP'));
@@ -198,6 +199,30 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="main-content">
+        {/* Mobile Header */}
+        <div style={{ 
+          display: 'none',
+          position: 'sticky', 
+          top: 0, 
+          zIndex: 10,
+          background: 'rgba(3, 7, 18, 0.9)',
+          backdropFilter: 'blur(8px)',
+          margin: '-1rem -1rem 1rem',
+          padding: '0.75rem 1rem',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid var(--border)'
+        }} className="mobile-menu-btn">
+          <button 
+            onClick={() => setSidebarOpen(true)}
+            style={{ background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: '0.5rem' }}
+          >
+            <Layout size={24} />
+          </button>
+          <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>ERP</div>
+          <div style={{ width: 24 }}></div>
+        </div>
+
         {/* Desktop Header Overlay */}
         <div style={{ 
           position: 'sticky', 
