@@ -2,27 +2,29 @@ import React from 'react';
 import { 
   Layout, Factory, ClipboardList, Package, ShoppingCart, 
   BarChart3, LayoutDashboard, AlertCircle, Settings, X, 
-  Users, ShieldCheck, Truck, History, LogOut
+  Users, ShieldCheck, History, LogOut
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/translations';
 
 const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
+  const { t } = useLanguage();
+
+
+
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'part_numbers', label: 'Números de Parte', icon: Package },
-    { id: 'routing', label: 'Rutas de Prod', icon: Settings },
-    { id: 'orders', label: 'Órdenes Prod', icon: ClipboardList },
-    { id: 'wip', label: 'Seguimiento WIP', icon: Layout },
-    { id: 'capture', label: 'Captura Prod', icon: Layout },
-    { id: 'scrap', label: 'Reporte Scrap', icon: AlertCircle },
-    { id: 'quality', label: 'Calidad', icon: ShieldCheck },
-    { id: 'receipts', label: 'Recepciones', icon: Truck },
-    { id: 'traceability', label: 'Trazabilidad', icon: History },
-    { id: 'inventory', label: 'Inventario', icon: ShoppingCart },
+    { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+    { id: 'part_numbers', label: t.partNumbers, icon: Package },
+    { id: 'routing', label: t.productionRouting, icon: Settings },
+    { id: 'orders', label: t.productionOrders, icon: ClipboardList },
+    { id: 'wip', label: t.wipBalance, icon: Layout },
+    { id: 'capture', label: t.productionCapture, icon: Layout },
+    { id: 'quality', label: t.qualityControl, icon: ShieldCheck },
+    { id: 'inventory', label: t.inventoryTitle, icon: ShoppingCart },
   ];
 
   if (userRole === 'admin' || userRole === 'supervisor') {
-    menuItems.push({ id: 'users', label: 'Gestión Usuarios', icon: Users });
+    menuItems.push({ id: 'users', label: t.userManagementTitle, icon: Users });
   }
 
   return (
@@ -52,7 +54,6 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
       </div>
 
       <nav style={{ flex: 1 }}>
-        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: '1rem', paddingLeft: '1rem' }}>Módulos</p>
         {menuItems.map((item) => (
           <div
             key={item.id}
@@ -79,7 +80,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
           style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'left' }}
         >
           <LogOut size={20} />
-          <span>Cerrar Sesión</span>
+          <span>{t.signOut}</span>
         </button>
       </div>
     </div>

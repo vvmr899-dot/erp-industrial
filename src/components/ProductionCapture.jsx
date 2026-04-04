@@ -18,10 +18,11 @@ import {
   Cpu,
   Edit3,
   Trash2,
-  X
+  X,
+  RefreshCcw
 } from 'lucide-react';
 
-const ProductionCapture = () => {
+const ProductionCapture = ({ userRole }) => {
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [wipSteps, setWipSteps] = useState([]);
@@ -33,6 +34,8 @@ const ProductionCapture = () => {
   
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnQty, setReturnQty] = useState(0);
   const [operationHistory, setOperationHistory] = useState([]);
   const [selectedLogForAdjustment, setSelectedLogForAdjustment] = useState(null);
   
@@ -43,6 +46,7 @@ const ProductionCapture = () => {
     quantity_bad: '',
     defect_type: '',
     defect_notes: '',
+    lot_number: '',
     is_rework: false,
     adjustment_comment: ''
   });
@@ -193,11 +197,19 @@ const fetchWIP = async (orderId) => {
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const currentStep = wipSteps.find(s => s.id === selectedStepId);
+  const isFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');
+  // Solo el rol de calidad (o admin) puede realizar capturas en operaciones FQC
+  const restrictedFQC = isFQC && userRole !== 'calidad' && userRole !== 'admin';
   const totalAvailableForCapture = currentStep ? (parseFloat(currentStep.quantity_available) + parseFloat(currentStep.quantity_in_process)) : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!currentStep) return;
+
+    if (restrictedFQC) {
+      alert("Esta operación requiere liberación de Calidad (FQC). Por favor solicita el apoyo del personal de calidad.");
+      return;
+    }
 
     const good = parseFloat(formData.quantity_good) || 0;
     const bad = parseFloat(formData.quantity_bad) || 0;
@@ -205,6 +217,11 @@ const fetchWIP = async (orderId) => {
 
     if (total > totalAvailableForCapture) {
       alert(`No hay suficiente WIP disponible. Total disponible (Disp + Proc): ${totalAvailableForCapture} piezas.`);
+      return;
+    }
+
+    if (bad > 0 && (!formData.lot_number || formData.lot_number.trim() === '')) {
+      alert('Por favor especifica el Lote o Secuencia de Lote de las piezas rechazadas.');
       return;
     }
 
@@ -222,12 +239,27 @@ const fetchWIP = async (orderId) => {
         quantity_defects: bad,
         defect_type: formData.defect_type,
         defect_notes: formData.defect_notes,
+        lot_number: formData.lot_number,
         is_rework: formData.is_rework
       });
 
       if (errLog) throw new Error(errLog.message);
 
-      setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '' });
+      // Si se reportaron piezas con defectos, las registramos en Calidad (production_scrap)
+      if (bad > 0) {
+        await supabase.from('production_scrap').insert({
+          production_order_id: selectedOrderId,
+          routing_id: currentStep.routing_id,
+          defect_type: formData.defect_type || 'Pendiente de clasificar',
+          quantity: bad,
+          operator_name: formData.operator_name,
+          defect_comment: formData.defect_notes,
+          lot_number: formData.lot_number,
+          status: 'Pendiente'
+        });
+      }
+
+      setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '', lot_number: '' });
       fetchWIP(selectedOrderId);
       fetchOrderDetails(selectedOrderId);
       alert('Transacción completada exitosamente.');
@@ -235,6 +267,33 @@ const fetchWIP = async (orderId) => {
     } catch (err) {
       console.error(err);
       alert("Error en la transacción: " + err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReturnWIP = async () => {
+    if (!selectedOrderId || !selectedStepId || returnQty <= 0) return;
+    
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc('fn_return_wip', {
+        p_order_id: selectedOrderId,
+        p_routing_id: currentStep.routing_id,
+        p_quantity: returnQty,
+        p_operator: formData.operator_name || 'ADMIN'
+      });
+
+      if (error) throw error;
+
+      alert(`Se han regresado ${returnQty} piezas a la operación anterior.`);
+      setShowReturnModal(false);
+      setReturnQty(0);
+      fetchWIP(selectedOrderId);
+      fetchOrderDetails(selectedOrderId);
+    } catch (err) {
+      console.error(err);
+      alert("Error al regresar WIP: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -369,6 +428,23 @@ const fetchWIP = async (orderId) => {
             {selectedStepId ? (
               <div className="card-mesh" style={{ padding: '2rem' }}>
                 <form onSubmit={handleSubmit}>
+                  {restrictedFQC && (
+                    <div style={{ 
+                      background: 'rgba(239, 68, 68, 0.1)', 
+                      border: '1px solid var(--danger)', 
+                      padding: '1rem', 
+                      borderRadius: '8px', 
+                      marginBottom: '1.5rem',
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'center'
+                    }}>
+                      <AlertCircle size={20} color="var(--danger)" />
+                      <div style={{ fontSize: '0.9rem', color: 'var(--danger)', fontWeight: 600 }}>
+                        Operación FQC Restringida: Solicitar liberación al departamento de Calidad.
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                     <div className="form-group">
                       <label style={labelStyle}>Operador</label>
@@ -437,21 +513,34 @@ const fetchWIP = async (orderId) => {
                   </div>
 
                   {parseFloat(formData.quantity_bad) > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label style={labelStyle}>Tipo de Defecto</label>
-                        <select 
-                          value={formData.defect_type} 
-                          onChange={(e) => setFormData({...formData, defect_type: e.target.value})}
-                          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                        >
-                          <option value="">-- Seleccionar --</option>
-                          <option value="Dimensional">Dimensional</option>
-                          <option value="Visual/Acabado">Visual/Acabado</option>
-                          <option value="Material">Material</option>
-                          <option value="Funcional">Funcional</option>
-                          <option value="Otro">Otro</option>
-                        </select>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label style={labelStyle}>Tipo de Defecto</label>
+                          <select 
+                            value={formData.defect_type} 
+                            onChange={(e) => setFormData({...formData, defect_type: e.target.value})}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                          >
+                            <option value="">-- Seleccionar --</option>
+                            <option value="Dimensional">Dimensional</option>
+                            <option value="Visual/Acabado">Visual/Acabado</option>
+                            <option value="Material">Material</option>
+                            <option value="Funcional">Funcional</option>
+                            <option value="Otro">Otro</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label style={{ ...labelStyle, color: 'var(--danger)' }}>Lote / Secuencia de Lote *</label>
+                          <input 
+                            type="text" 
+                            required
+                            placeholder="Ej: L-001 o Seq 1-20"
+                            value={formData.lot_number}
+                            onChange={(e) => setFormData({...formData, lot_number: e.target.value})}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid var(--danger)', background: '#111827', color: 'var(--text)' }}
+                          />
+                        </div>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={labelStyle}>Notas sobre Defectos</label>
@@ -486,17 +575,37 @@ const fetchWIP = async (orderId) => {
                       style={{ flex: 1, background: 'rgba(99, 102, 241, 0.1)', border: '1px solid var(--primary)', color: 'var(--primary)' }}
                       disabled={!selectedStepId || submitting}
                     >
-                      <Clock size={16} /> Ver Historial
+                      <Clock size={16} /> Historial
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setReturnQty(0);
+                        setShowReturnModal(true);
+                      }}
+                      style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)' }}
+                      disabled={!selectedStepId || submitting}
+                    >
+                      Regresar WIP
                     </button>
                   </div>
 
                   <button 
                     type="submit" 
                     className="btn btn-primary" 
-                    style={{ width: '100%', height: '3.5rem', fontSize: '1.1rem', fontWeight: '700', borderRadius: '12px' }}
-                    disabled={submitting}
+                    style={{ 
+                      width: '100%', 
+                      height: '3.5rem', 
+                      fontSize: '1.1rem', 
+                      fontWeight: '700', 
+                      borderRadius: '12px',
+                      opacity: restrictedFQC ? 0.5 : 1,
+                      cursor: restrictedFQC ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={submitting || restrictedFQC}
                   >
-                    {submitting ? <Loader2 className="animate-spin" /> : <><Save size={20} /> Registrar Producción</>}
+                    {submitting ? <Loader2 className="animate-spin" /> : <>{restrictedFQC ? <CheckCircle2 size={20} /> : <Save size={20} />} {restrictedFQC ? "ESPERANDO LIBERACIÓN FQC" : "Registrar Producción"}</>}
                   </button>
                 </form>
               </div>
@@ -746,6 +855,61 @@ const fetchWIP = async (orderId) => {
                 disabled={submitting}
               >
                 {submitting ? <Loader2 className="animate-spin" size={16} /> : 'Aplicar Ajuste'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Regresar WIP */}
+      {showReturnModal && (
+        <div className="modal-overlay" onClick={() => setShowReturnModal(false)}>
+          <div className="modal-content card-mesh" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <RefreshCcw size={24} className="text-danger" /> Regresar WIP
+              </h2>
+              <button onClick={() => setShowReturnModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                Esta acción restará WIP de la operación <strong>{currentStep?.operation_name}</strong> y lo devolverá como disponible a la operación anterior.
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label style={labelStyle}>Cantidad a Regresar</label>
+              <input 
+                type="number"
+                min="1"
+                max={totalAvailableForCapture}
+                value={returnQty}
+                onChange={(e) => setReturnQty(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)', fontSize: '1.5rem', fontWeight: '800' }}
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                Máximo permitido: {totalAvailableForCapture} piezas
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+              <button 
+                onClick={() => setShowReturnModal(false)}
+                className="btn"
+                style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleReturnWIP}
+                className="btn btn-primary"
+                style={{ flex: 1, background: 'var(--danger)', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}
+                disabled={submitting || returnQty <= 0 || returnQty > totalAvailableForCapture}
+              >
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : 'Confirmar Regreso'}
               </button>
             </div>
           </div>

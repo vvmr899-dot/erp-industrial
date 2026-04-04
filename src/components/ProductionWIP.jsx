@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { AlertTriangle, Loader2, Search, Factory } from 'lucide-react';
 
-const ProductionWIP = () => {
+const ProductionWIP = ({ userRole }) => {
+  const isReadOnly = userRole === 'calidad';
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [wipSteps, setWipSteps] = useState([]);

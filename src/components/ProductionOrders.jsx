@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Plus, ChevronDown, Calendar, Hash, Package, MoreVertical, Loader2, CheckCircle2, Trash2, RefreshCw, Edit2, Search, X } from 'lucide-react';
 
-const ProductionOrders = () => {
+const ProductionOrders = ({ userRole }) => {
+  const isReadOnly = userRole === 'calidad';
   const [orders, setOrders] = useState([]);
   const [partNumbers, setPartNumbers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -332,9 +333,11 @@ const ProductionOrders = () => {
           <h1>Órdenes de Producción</h1>
           <p style={{ color: 'var(--text-muted)' }}>Gestión y seguimiento de trabajos en planta.</p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenNewOrder}>
-          <Plus size={18} /> Nueva Orden
-        </button>
+        {!isReadOnly && (
+          <button className="btn btn-primary" onClick={handleOpenNewOrder}>
+            <Plus size={18} /> Nueva Orden
+          </button>
+        )}
       </header>
 
       <div className="card-mesh" style={{ padding: '1rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -427,63 +430,67 @@ const ProductionOrders = () => {
                     </span>
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <label 
-                        className="switch" 
-                        title={order.is_active ? "Orden Activa (Producción Habilitada)" : "Orden Inactiva (Producción Bloqueada)"}
-                        style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}
-                      >
-                        <input 
-                          type="checkbox" 
-                          checked={order.is_active} 
-                          onChange={() => handleToggleActive(order.id, order.is_active)}
-                          style={{ opacity: 0, width: 0, height: 0 }}
-                        />
-                        <span style={{
-                          position: 'absolute',
-                          cursor: 'pointer',
-                          top: 0, left: 0, right: 0, bottom: 0,
-                          backgroundColor: order.is_active ? 'var(--primary)' : '#4b5563',
-                          transition: '.4s',
-                          borderRadius: '20px'
-                        }}>
+                    {isReadOnly ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Solo vista</span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <label 
+                          className="switch" 
+                          title={order.is_active ? "Orden Activa (Producción Habilitada)" : "Orden Inactiva (Producción Bloqueada)"}
+                          style={{ position: 'relative', display: 'inline-block', width: '40px', height: '20px' }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={order.is_active} 
+                            onChange={() => handleToggleActive(order.id, order.is_active)}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
                           <span style={{
                             position: 'absolute',
-                            height: '14px', width: '14px',
-                            left: '3px', bottom: '3px',
-                            backgroundColor: 'white',
+                            cursor: 'pointer',
+                            top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: order.is_active ? 'var(--primary)' : '#4b5563',
                             transition: '.4s',
-                            borderRadius: '50%',
-                            transform: order.is_active ? 'translateX(20px)' : 'translateX(0)'
-                          }}></span>
-                        </span>
-                      </label>
-                      <select 
-                        style={{ width: 'auto', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', border: '1px solid var(--border)', fontSize: '0.8rem' }}
-                        value={order.status}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                      >
-                        {statuses.map(s => (
-                          <option key={s.id} value={s.id} style={{ background: 'var(--bg)', color: 'white' }}>{s.label}</option>
-                        ))}
-                      </select>
-                      <button 
-                        className="icon-btn" 
-                        title="Editar Orden"
-                        onClick={() => handleEditClick(order)}
-                        style={{ padding: '4px', color: 'var(--primary)' }}
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button 
-                        className="icon-btn icon-btn-danger" 
-                        title="Eliminar Orden"
-                        onClick={() => handleDeleteOrder(order)}
-                        style={{ padding: '4px' }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                            borderRadius: '20px'
+                          }}>
+                            <span style={{
+                              position: 'absolute',
+                              height: '14px', width: '14px',
+                              left: '3px', bottom: '3px',
+                              backgroundColor: 'white',
+                              transition: '.4s',
+                              borderRadius: '50%',
+                              transform: order.is_active ? 'translateX(20px)' : 'translateX(0)'
+                            }}></span>
+                          </span>
+                        </label>
+                        <select 
+                          style={{ width: 'auto', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', border: '1px solid var(--border)', fontSize: '0.8rem' }}
+                          value={order.status}
+                          onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                        >
+                          {statuses.map(s => (
+                            <option key={s.id} value={s.id} style={{ background: 'var(--bg)', color: 'white' }}>{s.label}</option>
+                          ))}
+                        </select>
+                        <button 
+                          className="icon-btn" 
+                          title="Editar Orden"
+                          onClick={() => handleEditClick(order)}
+                          style={{ padding: '4px', color: 'var(--primary)' }}
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          className="icon-btn icon-btn-danger" 
+                          title="Eliminar Orden"
+                          onClick={() => handleDeleteOrder(order)}
+                          style={{ padding: '4px' }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))

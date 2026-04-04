@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { LanguageProvider, useLanguage } from './lib/translations';
 import Sidebar from './components/Sidebar';
 import ProductionOrders from './components/ProductionOrders';
 import ProductionWIP from './components/ProductionWIP';
 import ProductionCapture from './components/ProductionCapture';
-import ProductionScrap from './components/ProductionScrap';
 import Inventory from './components/Inventory';
 import Dashboard from './components/Dashboard';
 import PartNumbers from './components/PartNumbers';
@@ -12,18 +12,51 @@ import ProductionRouting from './components/ProductionRouting';
 import UserManagement from './components/UserManagement';
 import Login from './components/Login';
 import QualityInspections from './components/QualityInspections';
-import WarehouseReceipts from './components/WarehouseReceipts';
-import Traceability from './components/Traceability';
 
-function App() {
+function LanguageSelector() {
+  const { lang, setLang, t } = useLanguage();
+  
+  const langConfig = {
+    es: { label: "ES", locale: "es-MX" },
+    en: { label: "EN", locale: "en-US" },
+    zh: { label: "中", locale: "zh-CN" }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      {Object.entries(langConfig).map(([code, config]) => (
+        <button
+          key={code}
+          onClick={() => setLang(code)}
+          style={{
+            padding: '4px 10px',
+            fontSize: '11px',
+            borderRadius: '4px',
+            background: lang === code ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+            color: lang === code ? '#8B5CF6' : 'var(--text-muted)',
+            border: `1px solid ${lang === code ? '#8B5CF6' : 'var(--border)'}`,
+            cursor: 'pointer',
+            fontWeight: lang === code ? 600 : 400,
+            transition: 'all 0.15s'
+          }}
+        >
+          {config.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AppContent() {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [criticalAlerts, setCriticalAlerts] = useState([]);
 
   useEffect(() => {
-    // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
@@ -33,7 +66,6 @@ function App() {
       }
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
@@ -46,6 +78,28 @@ function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Realtime Alerts para Scrap (Rechazos) - Modal Persistente
+  useEffect(() => {
+    if (!session || !["admin", "calidad"].includes(userRole)) return;
+
+    const channel = supabase.channel('scrap_alerts')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'production_scrap' },
+        (payload) => {
+          const qty = payload.new.quantity;
+          const defect = payload.new.defect_type || "No especificado";
+          // Dispara pantalla de bloqueo (Critical Alert)
+          setCriticalAlerts(prev => [...prev, { id: Date.now(), qty, defect }]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, userRole]);
 
   const fetchUserRole = async (userId) => {
     try {
@@ -74,25 +128,19 @@ function App() {
       case 'dashboard':
         return <Dashboard />;
       case 'orders':
-        return <ProductionOrders />;
+        return <ProductionOrders userRole={userRole} />;
       case 'wip':
-        return <ProductionWIP />;
+        return <ProductionWIP userRole={userRole} />;
       case 'capture':
-        return <ProductionCapture />;
-      case 'scrap':
-        return <ProductionScrap />;
+        return <ProductionCapture userRole={userRole} />;
       case 'inventory':
-        return <Inventory />;
+        return <Inventory userRole={userRole} />;
       case 'part_numbers':
-        return <PartNumbers />;
+        return <PartNumbers userRole={userRole} />;
       case 'routing':
-        return <ProductionRouting />;
+        return <ProductionRouting userRole={userRole} />;
       case 'quality':
-        return <QualityInspections userRole={userRole} />;
-      case 'receipts':
-        return <WarehouseReceipts userRole={userRole} />;
-      case 'traceability':
-        return <Traceability />;
+        return <QualityInspections userRole={userRole} session={session} embedded />;
       case 'users':
         return <UserManagement userRole={userRole} />;
       default:
@@ -118,6 +166,7 @@ function App() {
   if (!session) {
     return <Login />;
   }
+
 
   return (
     <>
@@ -154,49 +203,112 @@ function App() {
           margin: '-2.5rem -3rem 2rem',
           padding: '1.25rem 3rem',
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '1.5rem',
           borderBottom: '1px solid var(--border)'
         }} className="desktop-only">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{session.user.email}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{userRole}</div>
+          <LanguageSelector />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>{session.user.email}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{userRole}</div>
+              </div>
+              <div style={{ 
+                width: '40px', 
+                height: '40px', 
+                borderRadius: '50%', 
+                background: 'var(--primary)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '1rem',
+                boxShadow: '0 0 15px rgba(99, 102, 241, 0.3)'
+              }}>
+                {session.user.email[0].toUpperCase()}
+              </div>
             </div>
-            <div style={{ 
-              width: '40px', 
-              height: '40px', 
-              borderRadius: '50%', 
-              background: 'var(--primary)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '1rem',
-              boxShadow: '0 0 15px rgba(99, 102, 241, 0.3)'
-            }}>
-              {session.user.email[0].toUpperCase()}
-            </div>
+            <button 
+              onClick={() => supabase.auth.signOut()}
+              className="btn"
+              style={{ 
+                padding: '0.5rem 1rem', 
+                fontSize: '0.75rem', 
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: 'var(--danger)',
+                border: '1px solid rgba(239, 68, 68, 0.2)'
+              }}
+            >
+              {t.signOut}
+            </button>
           </div>
-          <button 
-            onClick={() => supabase.auth.signOut()}
-            className="btn"
-            style={{ 
-              padding: '0.5rem 1rem', 
-              fontSize: '0.75rem', 
-              background: 'rgba(239, 68, 68, 0.1)',
-              color: 'var(--danger)',
-              border: '1px solid rgba(239, 68, 68, 0.2)'
-            }}
-          >
-            Cerrar Sesión
-          </button>
         </div>
 
         {renderContent()}
+
+        {/* Modal Bloqueante de Alerta Crítica (Rechazos) */}
+        {criticalAlerts.length > 0 && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(153, 27, 27, 0.95)', // Deep red
+            backdropFilter: 'blur(12px)',
+            zIndex: 99999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            padding: '2rem',
+            animation: 'fadeIn 0.2s ease-out'
+          }}>
+            <div style={{ fontSize: '80px', marginBottom: '1rem', animation: 'pulse 1s ease-in-out infinite alternate' }}>
+              ⚠️
+            </div>
+            <h1 style={{ fontSize: '3rem', fontWeight: 900, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '-0.05em', marginBottom: '1rem', textShadow: '0 4px 10px rgba(0,0,0,0.5)' }}>
+              REPORTE DE RECHAZO DETECTADO
+            </h1>
+            <div style={{ fontSize: '1.25rem', fontWeight: 500, marginBottom: '3rem', textAlign: 'center', background: 'rgba(0,0,0,0.4)', padding: '2rem 3rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.2)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+              Hay <strong style={{ fontSize: '3rem', color: '#F87171', display: 'inline-block', margin: '0 0.5rem', lineHeight: '1' }}>{criticalAlerts.length}</strong> alertas de calidad críticas sin revisar.<br/><br/>
+              <span style={{ fontSize: '1.25rem', opacity: 0.9 }}>
+                Último reporte en vivo: <strong>{criticalAlerts[criticalAlerts.length - 1].qty} piezas</strong> por defecto de <strong>"{criticalAlerts[criticalAlerts.length - 1].defect}"</strong>.
+              </span>
+            </div>
+            
+            <button 
+              className="btn"
+              onClick={() => {
+                setCriticalAlerts([]); 
+                setActiveTab('quality'); 
+              }}
+              style={{
+                background: '#FFFFFF',
+                color: '#991B1B',
+                padding: '1.25rem 3rem',
+                fontSize: '1.25rem',
+                fontWeight: 800,
+                border: 'none',
+                borderRadius: '0.75rem',
+                cursor: 'pointer',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                textTransform: 'uppercase'
+              }}
+            >
+              ✅ ENTERADO, IR A CALIDAD
+            </button>
+          </div>
+        )}
       </main>
     </>
+  );
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }
 
