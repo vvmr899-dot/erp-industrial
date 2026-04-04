@@ -1137,19 +1137,23 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
     if (!itemToDelete) return;
     const id = itemToDelete.id;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('production_scrap')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (error) {
       console.error('Error al eliminar scrap:', error);
       setAlert({ type: 'error', message: 'Error al eliminar: ' + error.message });
+    } else if (!data || data.length === 0) {
+      console.error('Violación de políticas / Sin permisos:', id);
+      setAlert({ type: 'error', message: 'No tienes los permisos necesarios para borrar este registro o ya fue eliminado.' });
     } else {
       setScrap(prev => prev.filter(s => s.id !== id));
       setAlert({ type: 'success', message: 'Registro eliminado correctamente' });
     }
-    setTimeout(() => setAlert(null), 2000);
+    setTimeout(() => setAlert(null), 3000);
     setItemToDelete(null);
   };
 
