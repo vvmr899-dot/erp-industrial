@@ -17,12 +17,17 @@ const UserManagement = ({ userRole }) => {
     try {
       setLoading(true);
       setError(null);
+      console.log('Fetching from profiles table...');
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+      console.log('Users fetched:', data);
       setUsers(data || []);
     } catch (err) {
       console.error('Error fetching users:', err);
