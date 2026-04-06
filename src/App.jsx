@@ -98,8 +98,13 @@ function AppContent() {
             const qty = newRecord.quantity || 0;
             const defect = newRecord.defect_type || "No especificado";
             const status = newRecord.status || '';
-            if (status !== 'APROBADO') {
-              setCriticalAlerts(prev => [...prev, { id: Date.now(), qty, defect }]);
+            const recordId = newRecord.id;
+            
+            if (status === 'RECHAZADO' || status === 'Pendiente') {
+              setCriticalAlerts(prev => {
+                if (prev.some(a => a.id === recordId)) return prev;
+                return [...prev, { id: recordId, qty, defect }];
+              });
             }
           } catch (e) {
             console.error('Error processing scrap alert:', e);
@@ -308,9 +313,8 @@ function AppContent() {
               REPORTE DE RECHAZO DETECTADO
             </h1>
             <div style={{ fontSize: '1.25rem', fontWeight: 500, marginBottom: '3rem', textAlign: 'center', background: 'rgba(0,0,0,0.4)', padding: '2rem 3rem', borderRadius: '1rem', border: '1px solid rgba(255,255,255,0.2)', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-              Hay <strong style={{ fontSize: '3rem', color: '#F87171', display: 'inline-block', margin: '0 0.5rem', lineHeight: '1' }}>{criticalAlerts.length}</strong> alertas de calidad críticas sin revisar.<br/><br/>
               <span style={{ fontSize: '1.25rem', opacity: 0.9 }}>
-                Último reporte en vivo: <strong>{criticalAlerts[criticalAlerts.length - 1].qty} piezas</strong> por defecto de <strong>"{criticalAlerts[criticalAlerts.length - 1].defect}"</strong>.
+                Se reportó: <strong>{criticalAlerts[criticalAlerts.length - 1].qty} pieza(s)</strong> por defecto de <strong>"{criticalAlerts[criticalAlerts.length - 1].defect}"</strong>.
               </span>
             </div>
             
