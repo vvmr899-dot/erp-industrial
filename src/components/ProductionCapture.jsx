@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/translations';
 import { 
   ClipboardCheck, 
   User, 
@@ -18,10 +19,12 @@ import {
   Cpu,
   Edit3,
   Trash2,
-  X
+  X,
+  RefreshCcw
 } from 'lucide-react';
 
-const ProductionCapture = () => {
+const ProductionCapture = ({ userRole }) => {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [wipSteps, setWipSteps] = useState([]);
@@ -30,9 +33,12 @@ const ProductionCapture = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [completedQty, setCompletedQty] = useState(0);
+  const [toast, setToast] = useState(null);
   
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnQty, setReturnQty] = useState(0);
   const [operationHistory, setOperationHistory] = useState([]);
   const [selectedLogForAdjustment, setSelectedLogForAdjustment] = useState(null);
   
@@ -43,6 +49,7 @@ const ProductionCapture = () => {
     quantity_bad: '',
     defect_type: '',
     defect_notes: '',
+    lot_number: '',
     is_rework: false,
     adjustment_comment: ''
   });
@@ -98,14 +105,72 @@ const ProductionCapture = () => {
 
 const fetchWIP = async (orderId) => {
     setLoading(true);
-    const { data } = await supabase
-      .from('production_wip_balance')
-      .select('*')
-      .eq('production_order_id', orderId);
+    console.log('[fetchWIP] Iniciando para orderId:', orderId);
     
-    if (data) {
-      const sorted = [...data].sort((a, b) => a.operation_sequence - b.operation_sequence);
-      setWipSteps(sorted);
+    const { data: orderData } = await supabase
+      .from('production_orders')
+      .select('id, part_number_id')
+      .eq('id', orderId)
+      .single();
+    
+    if (!orderData) {
+      setLoading(false);
+      return;
+    }
+    
+    console.log('[fetchWIP] Order part_number_id:', orderData.part_number_id);
+    
+    const { data: routingData } = await supabase
+      .from('production_routing')
+      .select('id, sequence, sequence_base, sequence_sub, sequence_str, operation_name, machine_area, work_center, is_final_operation')
+      .eq('part_number_id', orderData.part_number_id)
+      .order('sequence_base', { nullsFirst: false })
+      .order('sequence_sub', { nullsFirst: true })
+      .order('sequence', { nullsFirst: false });
+    
+    console.log('[fetchWIP] Routing actual desde DB:', routingData);
+    
+    if (routingData && routingData.length > 0) {
+      const { data: wipData } = await supabase
+        .from('production_wip_balance')
+        .select('*')
+        .eq('production_order_id', orderId);
+      
+      const wipMap = {};
+      if (wipData) {
+        wipData.forEach(w => { wipMap[w.routing_id] = w; });
+      }
+      
+      const merged = routingData.map(r => {
+        const existingWip = wipMap[r.id];
+        if (existingWip) {
+          return {
+            ...existingWip,
+            operation_name: r.operation_name,
+            machine_area: r.machine_area,
+            work_center: r.work_center,
+            is_final_operation: r.is_final_operation,
+            sequence_base: r.sequence_base,
+            sequence_sub: r.sequence_sub,
+            sequence_str: r.sequence_str,
+            operation_sequence: r.sequence
+          };
+        }
+        return {
+          id: `new-${r.id}`,
+          production_order_id: orderId,
+          routing_id: r.id,
+          quantity_available: 0,
+          quantity_in_process: 0,
+          status: 'Pendiente',
+          ...r
+        };
+      });
+      
+      console.log('[fetchWIP] Resultado final merged:', merged.map(s => ({ id: s.id, operation_name: s.operation_name, routing_id: s.routing_id })));
+      setWipSteps(merged);
+    } else {
+      setWipSteps([]);
     }
     setLoading(false);
   };
@@ -193,11 +258,56 @@ const fetchWIP = async (orderId) => {
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
   const currentStep = wipSteps.find(s => s.id === selectedStepId);
+  const fqcStep = wipSteps.find(s => s.operation_name?.toUpperCase().includes('FQC'));
+  
+  let captureRestricted = false;
+  let captureRestrictionMessage = "";
+  let captureRestrictionBadge = "";
+
+  if (currentStep) {
+    const isAdmin = userRole === 'admin' || userRole === 'administrador';
+    if (!isAdmin) {
+      const isFQC = currentStep.operation_name?.toUpperCase().includes('FQC');
+      let isBeforeFQC = false;
+      if (fqcStep) {
+        const curVal = (currentStep.sequence_base ?? currentStep.operation_sequence) + ((currentStep.sequence_sub || 0) / 100);
+        const fqcVal = (fqcStep.sequence_base ?? fqcStep.operation_sequence) + ((fqcStep.sequence_sub || 0) / 100);
+        isBeforeFQC = curVal < fqcVal;
+      }
+      const phase = isFQC ? 'FQC' : ((isBeforeFQC || !fqcStep) ? 'BEFORE' : 'AFTER');
+
+      if (phase === 'FQC') {
+         if (userRole !== 'admin' && userRole !== 'administrador' && userRole !== 'calidad') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación FQC Restringida: Solo Admin o Calidad pueden liberar en esta estación.";
+            captureRestrictionBadge = "ESPERANDO LIBERACIÓN";
+         }
+      } else if (phase === 'BEFORE') {
+         if (userRole !== 'operador' && userRole !== 'supervisor') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación Restringida: Solo Operador y Supervisor pueden capturar en las estaciones previas a FQC.";
+            captureRestrictionBadge = "ACCIÓN NO PERMITIDA";
+         }
+      } else if (phase === 'AFTER') {
+         if (userRole !== 'almacen') {
+            captureRestricted = true;
+            captureRestrictionMessage = "Operación Restringida: Solo Almacén tiene acceso para la captura en embalaje o envíos (después de FQC).";
+            captureRestrictionBadge = "ESPERANDO ALMACÉN";
+         }
+      }
+    }
+  }
+
   const totalAvailableForCapture = currentStep ? (parseFloat(currentStep.quantity_available) + parseFloat(currentStep.quantity_in_process)) : 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!currentStep) return;
+
+    if (captureRestricted) {
+      alert(captureRestrictionMessage);
+      return;
+    }
 
     const good = parseFloat(formData.quantity_good) || 0;
     const bad = parseFloat(formData.quantity_bad) || 0;
@@ -205,6 +315,11 @@ const fetchWIP = async (orderId) => {
 
     if (total > totalAvailableForCapture) {
       alert(`No hay suficiente WIP disponible. Total disponible (Disp + Proc): ${totalAvailableForCapture} piezas.`);
+      return;
+    }
+
+    if (bad > 0 && (!formData.lot_number || formData.lot_number.trim() === '')) {
+      alert('Por favor especifica el Lote o Secuencia de Lote de las piezas rechazadas.');
       return;
     }
 
@@ -222,19 +337,115 @@ const fetchWIP = async (orderId) => {
         quantity_defects: bad,
         defect_type: formData.defect_type,
         defect_notes: formData.defect_notes,
+        lot_number: formData.lot_number,
         is_rework: formData.is_rework
       });
 
       if (errLog) throw new Error(errLog.message);
 
-      setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '' });
+      // Si hay piezas buenas y es ENVIO, pasar a inventario
+      if (good > 0 && currentStep?.operation_name?.toUpperCase().includes('ENVIO')) {
+        const partNumberId = selectedOrder?.part_number_id || selectedOrder?.numeros_parte?.id;
+        
+        // Registrar transacción de entrada a inventario
+        await supabase.from('inventory_transactions').insert({
+          part_number_id: partNumberId,
+          production_order_id: selectedOrderId,
+          transaction_type: 'FINISHED_GOODS_RECEIPT',
+          quantity: good
+        });
+
+        // Actualizar o insertar en inventory_stock
+        const { data: existingStock } = await supabase
+          .from('inventory_stock')
+          .select('id, quantity')
+          .eq('part_number_id', partNumberId)
+          .single();
+
+        if (existingStock) {
+          await supabase
+            .from('inventory_stock')
+            .update({ 
+              quantity: existingStock.quantity + good,
+              last_updated: new Date().toISOString()
+            })
+            .eq('id', existingStock.id);
+        } else {
+          await supabase.from('inventory_stock').insert({
+            part_number_id: partNumberId,
+            quantity: good
+          });
+        }
+      }
+
+      const isActualFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');
+
+      // Si se reportaron piezas con defectos, las registramos en Calidad (production_scrap)
+      if (bad > 0) {
+        await supabase.from('production_scrap').insert({
+          production_order_id: selectedOrderId,
+          routing_id: currentStep.routing_id,
+          defect_type: formData.defect_type || (isActualFQC ? 'FQC Rechazo' : 'Pendiente de clasificar'),
+          quantity: bad,
+          operator_name: formData.operator_name,
+          defect_comment: formData.defect_notes,
+          lot_number: formData.lot_number,
+          status: isActualFQC ? 'RECHAZADO' : 'Pendiente'
+        });
+      }
+
+      // Si es FQC y hay piezas buenas, generamos el registro de "Aprobado" para alimentar las métricas de calidad
+      if (isActualFQC && good > 0) {
+        const generatedLot = new Date().toISOString().slice(2,10).replace(/-/g,'') + '01';
+        await supabase.from('production_scrap').insert({
+          production_order_id: selectedOrderId,
+          routing_id: currentStep.routing_id,
+          defect_type: 'N/A',
+          quantity: good,
+          operator_name: formData.operator_name,
+          defect_comment: formData.adjustment_comment || 'Inspección FQC - Liberación Directa',
+          lot_number: formData.lot_number || generatedLot,
+          status: 'APROBADO'
+        });
+      }
+
+      setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '', lot_number: '' });
       fetchWIP(selectedOrderId);
       fetchOrderDetails(selectedOrderId);
-      alert('Transacción completada exitosamente.');
+      setToast({ type: 'success', message: 'Transacción completada exitosamente.' });
+      setTimeout(() => setToast(null), 3000);
 
     } catch (err) {
       console.error(err);
-      alert("Error en la transacción: " + err.message);
+      setToast({ type: 'error', message: 'Error en la transacción: ' + err.message });
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReturnWIP = async () => {
+    if (!selectedOrderId || !selectedStepId || returnQty <= 0) return;
+    
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.rpc('fn_return_wip', {
+        p_order_id: selectedOrderId,
+        p_routing_id: currentStep.routing_id,
+        p_quantity: returnQty,
+        p_operator: formData.operator_name || 'ADMIN'
+      });
+
+      if (error) throw error;
+
+      alert(`Se han regresado ${returnQty} piezas a la operación anterior.`);
+      setShowReturnModal(false);
+      setReturnQty(0);
+      fetchWIP(selectedOrderId);
+      fetchOrderDetails(selectedOrderId);
+    } catch (err) {
+      console.error(err);
+      alert("Error al regresar WIP: " + err.message);
     } finally {
       setSubmitting(false);
     }
@@ -293,17 +504,34 @@ const fetchWIP = async (orderId) => {
 
             <div className="card-mesh" style={{ padding: '1.5rem' }}>
               <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label style={{ ...labelStyle, marginBottom: '0.5rem', display: 'block' }}>Orden de Producción</label>
-                <select 
-                  value={selectedOrderId} 
-                  onChange={(e) => setSelectedOrderId(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                >
-                  <option value="">-- Buscar Orden --</option>
-                  {orders.map(o => (
-                    <option key={o.id} value={o.id}>{o.order_number} - {o.part_numbers?.part_number}</option>
-                  ))}
-                </select>
+                <label style={{ ...labelStyle, marginBottom: '0.5rem', display: 'block' }}>{t.productionOrder}</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <select 
+                    value={selectedOrderId} 
+                    onChange={(e) => setSelectedOrderId(e.target.value)}
+                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                  >
+                    <option value="">-- Buscar Orden --</option>
+                    {orders.map(o => (
+                      <option key={o.id} value={o.id}>{o.order_number} - {o.part_numbers?.part_number}</option>
+                    ))}
+                  </select>
+                  {selectedOrderId && (
+                    <button 
+                      type="button"
+                      onClick={() => { 
+                        fetchWIP(selectedOrderId); 
+                        fetchOrderDetails(selectedOrderId); 
+                        setToast({ type: 'success', message: 'Ruta sincronizada correctamente' });
+                        setTimeout(() => setToast(null), 3000);
+                      }}
+                      style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#1f2937', color: 'var(--text-muted)', cursor: 'pointer' }}
+                      title="Sincronizar ruta"
+                    >
+                      <RefreshCcw size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {selectedOrderId && (
@@ -338,8 +566,8 @@ const fetchWIP = async (orderId) => {
                   <option value="">-- Seleccionar Operación --</option>
                   {wipSteps.map(s => (
                     <option key={s.id} value={s.id}>
-                      OP {s.operation_sequence} - {s.operation_name} ({parseFloat(s.quantity_available) + parseFloat(s.quantity_in_process)} disp)
-                    </option>
+                    OP {s.sequence_str || s.operation_sequence} - {s.operation_name} ({parseFloat(s.quantity_available) + parseFloat(s.quantity_in_process)} disp)
+                  </option>
                   ))}
                 </select>
               </div>
@@ -369,6 +597,23 @@ const fetchWIP = async (orderId) => {
             {selectedStepId ? (
               <div className="card-mesh" style={{ padding: '2rem' }}>
                 <form onSubmit={handleSubmit}>
+                  {captureRestricted && (
+                    <div style={{ 
+                      background: 'rgba(239, 68, 68, 0.1)', 
+                      border: '1px solid var(--danger)', 
+                      padding: '1rem', 
+                      borderRadius: '8px', 
+                      marginBottom: '1.5rem',
+                      display: 'flex',
+                      gap: '12px',
+                      alignItems: 'center'
+                    }}>
+                      <AlertCircle size={20} color="var(--danger)" />
+                      <div style={{ fontSize: '0.9rem', color: 'var(--danger)', fontWeight: 600 }}>
+                        {captureRestrictionMessage}
+                      </div>
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                     <div className="form-group">
                       <label style={labelStyle}>Operador</label>
@@ -437,21 +682,34 @@ const fetchWIP = async (orderId) => {
                   </div>
 
                   {parseFloat(formData.quantity_bad) > 0 && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label style={labelStyle}>Tipo de Defecto</label>
-                        <select 
-                          value={formData.defect_type} 
-                          onChange={(e) => setFormData({...formData, defect_type: e.target.value})}
-                          style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                        >
-                          <option value="">-- Seleccionar --</option>
-                          <option value="Dimensional">Dimensional</option>
-                          <option value="Visual/Acabado">Visual/Acabado</option>
-                          <option value="Material">Material</option>
-                          <option value="Funcional">Funcional</option>
-                          <option value="Otro">Otro</option>
-                        </select>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label style={labelStyle}>Tipo de Defecto</label>
+                          <select 
+                            value={formData.defect_type} 
+                            onChange={(e) => setFormData({...formData, defect_type: e.target.value})}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                          >
+                            <option value="">-- Seleccionar --</option>
+                            <option value="Dimensional">Dimensional</option>
+                            <option value="Visual/Acabado">Visual/Acabado</option>
+                            <option value="Material">Material</option>
+                            <option value="Funcional">Funcional</option>
+                            <option value="Otro">Otro</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label style={{ ...labelStyle, color: 'var(--danger)' }}>Lote / Secuencia de Lote *</label>
+                          <input 
+                            type="text" 
+                            required
+                            placeholder="Ej: L-001 o Seq 1-20"
+                            value={formData.lot_number}
+                            onChange={(e) => setFormData({...formData, lot_number: e.target.value})}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '2px solid var(--danger)', background: '#111827', color: 'var(--text)' }}
+                          />
+                        </div>
                       </div>
                       <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={labelStyle}>Notas sobre Defectos</label>
@@ -486,17 +744,44 @@ const fetchWIP = async (orderId) => {
                       style={{ flex: 1, background: 'rgba(99, 102, 241, 0.1)', border: '1px solid var(--primary)', color: 'var(--primary)' }}
                       disabled={!selectedStepId || submitting}
                     >
-                      <Clock size={16} /> Ver Historial
+                      <Clock size={16} /> Historial
+                    </button>
+                    <button 
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setReturnQty(0);
+                        setShowReturnModal(true);
+                      }}
+                      style={{ 
+                        flex: 1, 
+                        background: 'rgba(239, 68, 68, 0.1)', 
+                        border: '1px solid var(--danger)', 
+                        color: 'var(--danger)',
+                        opacity: (!selectedStepId || submitting || captureRestricted) ? 0.5 : 1,
+                        cursor: (!selectedStepId || submitting || captureRestricted) ? 'not-allowed' : 'pointer'
+                      }}
+                      disabled={!selectedStepId || submitting || captureRestricted}
+                    >
+                      Regresar WIP
                     </button>
                   </div>
 
                   <button 
                     type="submit" 
                     className="btn btn-primary" 
-                    style={{ width: '100%', height: '3.5rem', fontSize: '1.1rem', fontWeight: '700', borderRadius: '12px' }}
-                    disabled={submitting}
+                    style={{ 
+                      width: '100%', 
+                      height: '3.5rem', 
+                      fontSize: '1.1rem', 
+                      fontWeight: '700', 
+                      borderRadius: '12px',
+                      opacity: captureRestricted ? 0.5 : 1,
+                      cursor: captureRestricted ? 'not-allowed' : 'pointer'
+                    }}
+                    disabled={submitting || captureRestricted}
                   >
-                    {submitting ? <Loader2 className="animate-spin" /> : <><Save size={20} /> Registrar Producción</>}
+                    {submitting ? <Loader2 className="animate-spin" /> : <>{captureRestricted ? <CheckCircle2 size={20} /> : <Save size={20} />} {captureRestricted ? captureRestrictionBadge : "Registrar Producción"}</>}
                   </button>
                 </form>
               </div>
@@ -557,7 +842,7 @@ const fetchWIP = async (orderId) => {
                           fontSize: '0.9rem',
                           fontWeight: '800'
                         }}>
-                          {step.operation_sequence}
+                          {step.sequence_str || step.operation_sequence}
                         </div>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -749,6 +1034,79 @@ const fetchWIP = async (orderId) => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal de Regresar WIP */}
+      {showReturnModal && (
+        <div className="modal-overlay" onClick={() => setShowReturnModal(false)}>
+          <div className="modal-content card-mesh" style={{ maxWidth: '450px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <RefreshCcw size={24} className="text-danger" /> Regresar WIP
+              </h2>
+              <button onClick={() => setShowReturnModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                <X size={24} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.1)' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                Esta acción restará WIP de la operación <strong>{currentStep?.operation_name}</strong> y lo devolverá como disponible a la operación anterior.
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label style={labelStyle}>Cantidad a Regresar</label>
+              <input 
+                type="number"
+                min="1"
+                max={totalAvailableForCapture}
+                value={returnQty}
+                onChange={(e) => setReturnQty(parseFloat(e.target.value) || 0)}
+                style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)', fontSize: '1.5rem', fontWeight: '800' }}
+              />
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                Máximo permitido: {totalAvailableForCapture} piezas
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+              <button 
+                onClick={() => setShowReturnModal(false)}
+                className="btn"
+                style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleReturnWIP}
+                className="btn btn-primary"
+                style={{ flex: 1, background: 'var(--danger)', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}
+                disabled={submitting || returnQty <= 0 || returnQty > totalAvailableForCapture}
+              >
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : 'Confirmar Regreso'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          background: toast.type === 'success' ? '#10B981' : '#EF4444',
+          color: '#fff',
+          padding: '12px 24px',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          zIndex: 9999,
+          fontWeight: 600,
+          animation: 'slideIn 0.3s ease'
+        }}>
+          {toast.message}
         </div>
       )}
     </div>

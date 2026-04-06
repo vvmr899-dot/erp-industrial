@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Package, Plus, Search, Loader2, Trash2, Edit2, X } from 'lucide-react';
 
-const PartNumbers = () => {
+const PartNumbers = ({ userRole }) => {
+  const isReadOnly = userRole === 'calidad';
   const [parts, setParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -128,9 +129,11 @@ const PartNumbers = () => {
           <h1>Números de Parte</h1>
           <p style={{ color: 'var(--text-muted)' }}>Catálogo maestro de piezas y componentes.</p>
         </div>
-        <button onClick={() => { setEditingPart(null); setNewPart({ part_number: '', description: '', uom: '' }); setError(''); setShowAddModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Plus size={18} /> Nuevo Número de Parte
-        </button>
+        {!isReadOnly && (
+          <button onClick={() => { setEditingPart(null); setNewPart({ part_number: '', description: '', uom: '' }); setError(''); setShowAddModal(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Plus size={18} /> Nuevo Número de Parte
+          </button>
+        )}
       </header>
 
       <div className="card-mesh" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
@@ -197,14 +200,18 @@ const PartNumbers = () => {
                     <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>{part.uom || 'N/A'}</span>
                   </td>
                   <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleEditClick(part)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
-                        <Edit2 size={18} />
-                      </button>
-                      <button onClick={() => deletePart(part.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
+                    {isReadOnly ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Solo vista</span>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => handleEditClick(part)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
+                          <Edit2 size={18} />
+                        </button>
+                        <button onClick={() => deletePart(part.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))

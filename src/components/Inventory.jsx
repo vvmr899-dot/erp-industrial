@@ -33,10 +33,12 @@ const ProductDetail = ({ item, onClose }) => {
         .limit(30),
       supabase
         .from('production_routing')
-        .select('sequence, operation_name, machine_area, standard_time_minutes, setup_time_minutes, is_final_operation')
+        .select('sequence, sequence_str, sequence_base, sequence_sub, operation_name, machine_area, standard_time_minutes, setup_time_minutes, is_final_operation')
         .eq('part_number_id', partId)
         .eq('active', true)
-        .order('sequence'),
+        .order('sequence_base', { nullsFirst: false })
+        .order('sequence_sub', { nullsFirst: true })
+        .order('sequence', { nullsFirst: false }),
     ]).then(([o, t, r]) => {
       setOrders(o.data || []);
       setTransactions(t.data || []);
@@ -282,7 +284,7 @@ const ProductDetail = ({ item, onClose }) => {
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '0.7rem', fontWeight: '800',
                             color: r.is_final_operation ? 'var(--accent)' : 'var(--primary)',
-                          }}>{r.sequence}</div>
+                          }}>{r.sequence_str || r.sequence}</div>
                           {i < routing.length - 1 && (
                             <div style={{ width: '2px', height: '24px', background: 'var(--border)' }} />
                           )}
@@ -396,7 +398,8 @@ const EmptyState = ({ icon: Icon, message }) => (
 );
 
 /* ─── INVENTARIO PRINCIPAL ──────────────────────────────────────── */
-const Inventory = () => {
+const Inventory = ({ userRole }) => {
+  const isReadOnly = userRole === 'calidad';
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
@@ -599,22 +602,26 @@ const Inventory = () => {
                     ACTUALIZADO: {new Date(item.last_updated).toLocaleDateString('es-MX')}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        onClick={(e) => handleOpenAdjustment(item, e)}
-                        className="icon-btn"
-                        title="Ajustar Cantidad"
-                        style={{ color: 'var(--primary)' }}
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ show: true, id: item.id }); }}
-                        className="icon-btn"
-                        title="Eliminar del Almacén"
-                        style={{ color: 'var(--danger)' }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {!isReadOnly && (
+                        <>
+                          <button
+                            onClick={(e) => handleOpenAdjustment(item, e)}
+                            className="icon-btn"
+                            title="Ajustar Cantidad"
+                            style={{ color: 'var(--primary)' }}
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ show: true, id: item.id }); }}
+                            className="icon-btn"
+                            title="Eliminar del Almacén"
+                            style={{ color: 'var(--danger)' }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
                         className="icon-btn"

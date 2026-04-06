@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Loader2, LogIn, Lock, Mail, ChevronDown } from 'lucide-react';
+import { useLanguage } from '../lib/translations';
+import { Loader2, LogIn, Lock, Mail } from 'lucide-react';
 
 const Login = () => {
+  const { lang, setLang, t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [lang, setLang] = useState('ES');
+
+  const langConfig = {
+    es: 'ES',
+    en: 'EN',
+    zh: '中'
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -37,7 +44,6 @@ const Login = () => {
       position: 'relative',
       overflow: 'hidden'
     }}>
-      {/* Background Radial Glow */}
       <div style={{
         position: 'absolute',
         top: '50%',
@@ -50,7 +56,6 @@ const Login = () => {
         pointerEvents: 'none'
       }}></div>
 
-      {/* Language Switcher */}
       <div style={{
         position: 'absolute',
         top: '2rem',
@@ -63,24 +68,24 @@ const Login = () => {
         border: '1px solid var(--border)',
         backdropFilter: 'blur(8px)'
       }}>
-        {['ES', 'EN', 'ZH'].map((l) => (
+        {Object.entries(langConfig).map(([code, label]) => (
           <button
-            key={l}
-            onClick={() => setLang(l)}
+            key={code}
+            onClick={() => setLang(code)}
             style={{
               padding: '0.5rem 1rem',
               borderRadius: '0.5rem',
               border: 'none',
-              background: lang === l ? 'var(--primary)' : 'transparent',
-              color: lang === l ? 'white' : 'var(--text-muted)',
+              background: lang === code ? 'var(--primary)' : 'transparent',
+              color: lang === code ? 'white' : 'var(--text-muted)',
               fontSize: '0.75rem',
               fontWeight: '700',
               cursor: 'pointer',
               transition: 'all 0.2s',
-              boxShadow: lang === l ? '0 0 10px rgba(99, 102, 241, 0.3)' : 'none'
+              boxShadow: lang === code ? '0 0 10px rgba(99, 102, 241, 0.3)' : 'none'
             }}
           >
-            {l}
+            {label}
           </button>
         ))}
       </div>
@@ -108,7 +113,6 @@ const Login = () => {
             position: 'relative'
           }}>
             <Lock size={36} color="var(--primary)" />
-            {/* Glow dot */}
             <div style={{
               position: 'absolute',
               inset: '-1px',
@@ -118,11 +122,9 @@ const Login = () => {
               filter: 'blur(4px)'
             }}></div>
           </div>
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 700, marginBottom: '0.75rem', color: 'white', fontFamily: 'var(--font-display)' }}>Nexus ERP</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Ingresa tus credenciales para continuar</p>
-        </div>
-
-        {error && (
+          <h1 style={{ fontSize: '2.25rem', fontWeight: 700, marginBottom: '0.75rem', color: 'white', fontFamily: 'var(--font-display)' }}>Invlog ERP</h1>
+          {/* Cambia t.loading por t('loading') */} <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}> {t('loading').replace('...', '') || 'Ingresa tus credenciales para continuar'}</p>
+        </div>{error && (
           <div style={{
             background: 'rgba(239, 68, 68, 0.1)',
             border: '1px solid rgba(239, 68, 68, 0.2)',
@@ -136,13 +138,13 @@ const Login = () => {
             gap: '0.75rem'
           }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--danger)' }}></div>
-            {error === 'Invalid login credentials' ? 'Correo o contraseña incorrectos' : error}
+            {error === 'Invalid login credentials' ? t.invalidCredentials : error}
           </div>
         )}
 
         <form onSubmit={handleLogin} style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
           <div>
-            <label>Correo Electrónico</label>
+            <label>{t.email}</label>
             <div style={{ position: 'relative' }}>
               <Mail size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)' }} />
               <input
@@ -159,7 +161,7 @@ const Login = () => {
           </div>
 
           <div>
-            <label>Contraseña</label>
+            <label>{t.password}</label>
             <div style={{ position: 'relative' }}>
               <Lock size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)' }} />
               <input
@@ -189,7 +191,7 @@ const Login = () => {
             {loading ? <Loader2 size={24} className="animate-spin" /> : (
               <>
                 <LogIn size={20} />
-                <span>Iniciar Sesión</span>
+                <span>{t.signInButton}</span>
               </>
             )}
           </button>

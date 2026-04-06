@@ -104,7 +104,9 @@ const UserManagement = ({ userRole }) => {
         const roleColors = {
           admin: { bg: 'rgba(16, 185, 129, 0.1)', text: '#10b981' },
           supervisor: { bg: 'rgba(245, 158, 11, 0.1)', text: '#f59e0b' },
-          operador: { bg: 'rgba(99, 102, 241, 0.1)', text: '#6366f1' }
+          operador: { bg: 'rgba(99, 102, 241, 0.1)', text: '#6366f1' },
+          almacen: { bg: 'rgba(59, 130, 246, 0.1)', text: '#3b82f6' },
+          calidad: { bg: 'rgba(139, 92, 246, 0.1)', text: '#8b5cf6' }
         };
         const style = roleColors[user.role] || { bg: 'rgba(107, 114, 128, 0.1)', text: '#6b7280' };
         
@@ -145,6 +147,8 @@ const UserManagement = ({ userRole }) => {
             <option value="admin">Administrador</option>
             <option value="supervisor">Supervisor</option>
             <option value="operador">Operador</option>
+            <option value="almacen">Almacén</option>
+            <option value="calidad">Calidad</option>
           </select>
         </div>
       )
