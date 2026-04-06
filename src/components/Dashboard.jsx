@@ -32,88 +32,117 @@ const Dashboard = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       const startOfDay = today + 'T00:00:00.000Z';
-      const endOfDay = today + 'T23:59:59.999Z';
 
-      const { data: orders } = await supabase.from('production_orders').select('status').eq('is_active', true);
-      const active = orders?.filter(o => ['Liberada', 'En Proceso'].includes(o.status)).length || 0;
+      // Órdenes activas
+      let active = 0;
+      try {
+        const { data: orders, error: ordersErr } = await supabase.from('production_orders').select('status').eq('is_active', true);
+        if (!ordersErr && orders) {
+          active = orders.filter(o => ['Liberada', 'En Proceso'].includes(o.status)).length;
+        }
+      } catch (e) { console.error('Error fetching orders:', e); }
 
-      const { data: wip } = await supabase.from('production_wip_balance').select('quantity_available, quantity_in_process');
-      const wipSum = wip?.reduce((acc, curr) => acc + (parseFloat(curr.quantity_in_process) || 0) + (parseFloat(curr.quantity_available) || 0), 0) || 0;
+      // WIP Total
+      let wipSum = 0;
+      try {
+        const { data: wip, error: wipErr } = await supabase.from('production_wip_balance').select('quantity_available, quantity_in_process');
+        if (!wipErr && wip) {
+          wipSum = wip.reduce((acc, curr) => acc + (parseFloat(curr.quantity_in_process) || 0) + (parseFloat(curr.quantity_available) || 0), 0);
+        }
+      } catch (e) { console.error('Error fetching WIP:', e); }
 
       let scrapToday = 0;
       let finishedToday = 0;
+
+      // Scrap hoy
       try {
-        const { data: scrapData } = await supabase
+        const { data: scrapData, error: scrapErr } = await supabase
           .from('production_scrap')
           .select('quantity, created_at')
           .gte('created_at', startOfDay)
           .neq('status', 'APROBADO');
-        if (scrapData && scrapData.length > 0) {
+        if (!scrapErr && scrapData && scrapData.length > 0) {
           scrapToday = scrapData.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
         }
-      } catch (e) { console.log('Sin datos de scrap'); }
+      } catch (e) { console.error('Error fetching scrap:', e); }
 
+      // Transacciones de inventario hoy
       try {
-        const { data: finishedData } = await supabase
+        const { data: finishedData, error: txErr } = await supabase
           .from('inventory_transactions')
           .select('quantity')
           .eq('transaction_type', 'FINISHED_GOODS_RECEIPT')
           .gte('created_at', startOfDay);
-        if (finishedData && finishedData.length > 0) {
+        if (!txErr && finishedData && finishedData.length > 0) {
           finishedToday = finishedData.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
         }
-      } catch (e) { console.log('Sin datos de transactions'); }
+      } catch (e) { console.error('Error fetching transactions:', e); }
 
+      // Stock total si no hay transacciones del día
       try {
-        const { data: stockData } = await supabase
+        const { data: stockData, error: stockErr } = await supabase
           .from('inventory_stock')
           .select('quantity')
           .gt('quantity', 0);
-        if (stockData && stockData.length > 0) {
+        if (!stockErr && stockData && stockData.length > 0) {
           const totalStock = stockData.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
           if (totalStock > finishedToday) {
             finishedToday = totalStock;
           }
         }
-      } catch (e) { console.log('Sin datos de stock'); }
+      } catch (e) { console.error('Error fetching stock:', e); }
 
       const totalProd = finishedToday + scrapToday;
       const rate = totalProd > 0 ? Math.round((scrapToday / totalProd) * 100) : 0;
 
-      const { data: activeOrdersData } = await supabase
-        .from('production_orders')
-        .select('id, order_number, quantity_planned, status, part_numbers(part_number)')
-        .in('status', ['En Proceso', 'Liberada'])
-        .eq('is_active', true)
-        .limit(5);
+      // Órdenes activas detalladas
+      let activeOrdersData = [];
+      try {
+        const { data, error } = await supabase
+          .from('production_orders')
+          .select('id, order_number, quantity_planned, status, part_numbers(part_number)')
+          .in('status', ['En Proceso', 'Liberada'])
+          .eq('is_active', true)
+          .limit(5);
+        if (!error && data) activeOrdersData = data;
+      } catch (e) { console.error('Error fetching active orders:', e); }
 
-      const { data: wipAreasData } = await supabase
-        .from('production_wip_balance')
-        .select('quantity_available, routing_id')
-        .gt('quantity_available', 0);
-      
+      // WIP por área
       const areaMap = {};
-      for (const w of (wipAreasData || [])) {
-        const { data: routing } = await supabase.from('production_routing').select('machine_area').eq('id', w.routing_id).single();
-        const area = routing?.machine_area || 'Sin área';
-        if (!areaMap[area]) areaMap[area] = 0;
-        areaMap[area] += parseFloat(w.quantity_available) || 0;
-      }
+      try {
+        const { data: wipAreasData, error: areaErr } = await supabase
+          .from('production_wip_balance')
+          .select('quantity_available, routing_id')
+          .gt('quantity_available', 0);
+        if (!areaErr && wipAreasData) {
+          for (const w of wipAreasData) {
+            const { data: routing } = await supabase.from('production_routing').select('machine_area').eq('id', w.routing_id).single();
+            const area = routing?.machine_area || 'Sin área';
+            if (!areaMap[area]) areaMap[area] = 0;
+            areaMap[area] += parseFloat(w.quantity_available) || 0;
+          }
+        }
+      } catch (e) { console.error('Error fetching WIP areas:', e); }
       const wipByAreaReal = Object.entries(areaMap).map(([area, qty]) => ({ area, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5);
 
-      const { data: routingMachines } = await supabase
-        .from('production_routing')
-        .select('id, work_center, machine_area, operation_name')
-        .not('work_center', 'is', null)
-        .limit(10);
-
-      const machineStatusReal = (routingMachines || []).map((m, i) => ({
-        id: m.work_center || `MC-${i + 1}`,
-        name: m.operation_name || m.machine_area || 'Máquina',
-        status: 'Activo',
-        load: Math.floor(Math.random() * 40) + 60,
-        inProcess: 0
-      }));
+      // Estado de máquinas
+      let machineStatusReal = [];
+      try {
+        const { data: routingMachines, error: machErr } = await supabase
+          .from('production_routing')
+          .select('id, work_center, machine_area, operation_name')
+          .not('work_center', 'is', null)
+          .limit(10);
+        if (!machErr && routingMachines) {
+          machineStatusReal = routingMachines.map((m, i) => ({
+            id: m.work_center || `MC-${i + 1}`,
+            name: m.operation_name || m.machine_area || 'Máquina',
+            status: 'Activo',
+            load: 75,
+            inProcess: 0
+          }));
+        }
+      } catch (e) { console.error('Error fetching machines:', e); }
 
       setStats({
         activeOrders: active,
@@ -125,12 +154,12 @@ const Dashboard = () => {
         machineUtilization: machineStatusReal.length > 0 ? Math.round((machineStatusReal.filter(m => m.status === 'Activo').length / machineStatusReal.length) * 100) : 0
       });
       
-      setActiveOrders(activeOrdersData || []);
+      setActiveOrders(activeOrdersData);
       setWipByArea(wipByAreaReal.length > 0 ? wipByAreaReal : [{ area: 'Sin datos', qty: 0 }]);
       setMachineStatus(machineStatusReal.length > 0 ? machineStatusReal : []);
       setLastRefresh(new Date());
     } catch (e) {
-      console.error(e);
+      console.error('Error en fetchDashboardData:', e);
     } finally {
       setLoading(false);
     }

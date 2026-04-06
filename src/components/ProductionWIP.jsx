@@ -98,6 +98,8 @@ const ProductionWIP = ({ userRole }) => {
     setLoading(false);
   };
 
+  const canEdit = userRole && !['calidad', 'operador'].includes(userRole.toLowerCase());
+
   return (
     <div className="container" style={{ maxWidth: '1400px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -105,6 +107,19 @@ const ProductionWIP = ({ userRole }) => {
           <h1>Trazabilidad de Piso (WIP)</h1>
           <p style={{ color: 'var(--text-muted)' }}>Monitoreo en tiempo real de unidades en cada estación de trabajo.</p>
         </div>
+        {isReadOnly && (
+          <span style={{ 
+            padding: '0.5rem 1rem', 
+            background: 'rgba(245,158,11,0.1)', 
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: '8px',
+            color: '#f59e0b',
+            fontSize: '0.8rem',
+            fontWeight: 600
+          }}>
+            Solo vista
+          </span>
+        )}
       </header>
 
       <div className="card-mesh" style={{ marginBottom: '2rem' }}>

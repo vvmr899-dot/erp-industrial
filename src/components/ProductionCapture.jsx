@@ -347,35 +347,56 @@ const fetchWIP = async (orderId) => {
       if (good > 0 && currentStep?.operation_name?.toUpperCase().includes('ENVIO')) {
         const partNumberId = selectedOrder?.part_number_id || selectedOrder?.numeros_parte?.id;
         
-        // Registrar transacción de entrada a inventario
-        await supabase.from('inventory_transactions').insert({
-          part_number_id: partNumberId,
-          production_order_id: selectedOrderId,
-          transaction_type: 'FINISHED_GOODS_RECEIPT',
-          quantity: good
-        });
-
-        // Actualizar o insertar en inventory_stock
-        const { data: existingStock } = await supabase
-          .from('inventory_stock')
-          .select('id, quantity')
-          .eq('part_number_id', partNumberId)
-          .single();
-
-        if (existingStock) {
-          await supabase
-            .from('inventory_stock')
-            .update({ 
-              quantity: existingStock.quantity + good,
-              last_updated: new Date().toISOString()
-            })
-            .eq('id', existingStock.id);
-        } else {
-          await supabase.from('inventory_stock').insert({
+        if (!partNumberId) {
+          throw new Error('No se encontró el ID del número de parte para actualizar inventario');
+        }
+        
+        try {
+          // Registrar transacción de entrada a inventario
+          const { error: txError } = await supabase.from('inventory_transactions').insert({
             part_number_id: partNumberId,
+            production_order_id: selectedOrderId,
+            transaction_type: 'FINISHED_GOODS_RECEIPT',
             quantity: good
           });
+
+          if (txError) throw txError;
+
+          // Actualizar o insertar en inventory_stock
+          const { data: existingStock, error: stockError } = await supabase
+            .from('inventory_stock')
+            .select('id, quantity')
+            .eq('part_number_id', partNumberId)
+            .single();
+
+          if (stockError && stockError.code !== 'PGRST116') {
+            throw stockError;
+          }
+
+          if (existingStock) {
+            const { error: updateError } = await supabase
+              .from('inventory_stock')
+              .update({ 
+                quantity: existingStock.quantity + good,
+                last_updated: new Date().toISOString()
+              })
+              .eq('id', existingStock.id);
+            if (updateError) throw updateError;
+          } else {
+            const { error: insertError } = await supabase.from('inventory_stock').insert({
+              part_number_id: partNumberId,
+              quantity: good
+            });
+            if (insertError) throw insertError;
+          }
+        } catch (inventoryError) {
+          console.error('Error en transacción de inventario:', inventoryError);
+          throw new Error('Falló la actualización de inventario. La producción fue registrada pero no se actualizó el stock.');
         }
+      }
+
+      if (!currentStep) {
+        throw new Error('No se encontró la operación actual');
       }
 
       const isActualFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');

@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { Plus, ChevronDown, Calendar, Hash, Package, MoreVertical, Loader2, CheckCircle2, Trash2, RefreshCw, Edit2, Search, X } from 'lucide-react';
 
 const ProductionOrders = ({ userRole }) => {
-  const isReadOnly = userRole === 'calidad';
+  const canEdit = userRole && !['calidad', 'operador'].includes(userRole.toLowerCase());
+  const isReadOnly = !canEdit;
   const [orders, setOrders] = useState([]);
   const [partNumbers, setPartNumbers] = useState([]);
   const [loading, setLoading] = useState(false);
