@@ -83,7 +83,6 @@ function AppContent() {
 
   // Realtime Alerts para Scrap (Rechazos) - Modal Persistente
   useEffect(() => {
-<<<<<<< HEAD
     if (!session || !["admin", "calidad", "administrador"].includes(userRole?.toLowerCase())) {
       return;
     }
@@ -93,7 +92,6 @@ function AppContent() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'production_scrap' },
         (payload) => {
-<<<<<<< HEAD
           try {
             const newRecord = payload.new;
             if (!newRecord) return;
@@ -105,7 +103,6 @@ function AppContent() {
             }
           } catch (e) {
             console.error('Error processing scrap alert:', e);
-          }
           }
         }
       )
