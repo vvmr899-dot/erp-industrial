@@ -53,24 +53,12 @@ const ProductionRouting = ({ userRole }) => {
   };
 
   const fetchMachines = async () => {
-    const { data } = await supabase
-      .from('production_routing')
-      .select('work_center, machine_area')
-      .not('work_center', 'is', null)
-      .not('work_center', 'eq', '');
-    
-    if (data) {
-      const uniqueMachines = [];
-      const seen = new Set();
-      for (const m of data) {
-        const key = m.work_center;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueMachines.push({ work_center: m.work_center, machine_area: m.machine_area });
-        }
-      }
-      setMachines(uniqueMachines);
-    }
+    const machineList = [
+      'L001', 'L002', 'L003', 'L004', 'L005', 'L006', 'L007', 'L008', 'L009', 'L010', 'L011', 'L012', 'L013',
+      'M001', 'M002', 'M003', 'M004', 'M005', 'M006', 'M007', 'M008', 'M009', 'M010', 'M011', 'M012', 'M013', 'M014',
+      'J001', 'Z001', 'C001', 'Q001'
+    ];
+    setMachines(machineList.map(m => ({ work_center: m, machine_area: '' })));
   };
 
   const fetchRoutings = async () => {
