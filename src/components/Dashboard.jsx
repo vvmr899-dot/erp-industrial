@@ -30,6 +30,7 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+<<<<<<< HEAD
       const today = new Date().toISOString().split('T')[0];
       const startOfDay = today + 'T00:00:00.000Z';
 
@@ -143,6 +144,29 @@ const Dashboard = () => {
           }));
         }
       } catch (e) { console.error('Error fetching machines:', e); }
+=======
+      const { data: orders } = await supabase.from('production_orders').select('status').eq('is_active', true);
+      const active = orders?.filter(o => ['Liberada', 'En Proceso'].includes(o.status)).length || 0;
+
+      const { data: wip } = await supabase.from('production_wip_balance').select('quantity_available, quantity_in_process');
+      const wipSum = wip?.reduce((acc, curr) => acc + (parseFloat(curr.quantity_in_process) || 0) + (parseFloat(curr.quantity_available) || 0), 0) || 0;
+
+      let scrapToday = 0;
+      try {
+        const { data: scrapData } = await supabase.from('production_scrap').select('quantity');
+        if (scrapData && scrapData.length > 0) {
+          scrapToday = scrapData.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
+        }
+      } catch (e) { console.log('Sin datos de scrap'); }
+
+      const rate = wipSum > 0 ? Math.round((scrapToday / wipSum) * 10) / 10 : 0;
+
+      const { data: activeOrdersData } = await supabase
+        .from('production_orders')
+        .select('id, order_number, quantity_planned, status, part_numbers(part_number)')
+        .in('status', ['En Proceso', 'Liberada'])
+        .eq('is_active', true)
+        .limit(5);
 
       setStats({
         activeOrders: active,
@@ -197,6 +221,7 @@ const Dashboard = () => {
         </div>
         <div className="card-mesh" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent)' }}>
           <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{t.dashboardProduction || 'Producción'}</div>
+<<<<<<< HEAD
           <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.finishedToday}</div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.terminados || 'Terminados hoy'}</div>
         </div>

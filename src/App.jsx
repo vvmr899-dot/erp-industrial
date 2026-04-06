@@ -83,7 +83,8 @@ function AppContent() {
 
   // Realtime Alerts para Scrap (Rechazos) - Modal Persistente
   useEffect(() => {
-    if (!session || !userRole || !["admin", "calidad", "administrador"].includes(userRole.toLowerCase())) {
+<<<<<<< HEAD
+    if (!session || !["admin", "calidad", "administrador"].includes(userRole?.toLowerCase())) {
       return;
     }
 
@@ -92,18 +93,19 @@ function AppContent() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'production_scrap' },
         (payload) => {
+<<<<<<< HEAD
           try {
             const newRecord = payload.new;
             if (!newRecord) return;
             const qty = newRecord.quantity || 0;
             const defect = newRecord.defect_type || "No especificado";
             const status = newRecord.status || '';
-            // Solo dispara pantalla de bloqueo si es RECHAZADO o Pendiente (no APROBADO)
             if (status !== 'APROBADO') {
               setCriticalAlerts(prev => [...prev, { id: Date.now(), qty, defect }]);
             }
           } catch (e) {
             console.error('Error processing scrap alert:', e);
+          }
           }
         }
       )
