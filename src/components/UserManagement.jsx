@@ -18,7 +18,7 @@ const UserManagement = ({ userRole }) => {
       setLoading(true);
       setError(null);
       const { data, error } = await supabase
-        .from('perfiles')
+        .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -36,7 +36,7 @@ const UserManagement = ({ userRole }) => {
     try {
       setUpdating(userId);
       const { error } = await supabase
-        .from('perfiles')
+        .from('profiles')
         .update({ role: newRole })
         .eq('id', userId);
 
