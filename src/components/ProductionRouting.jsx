@@ -490,6 +490,16 @@ const ProductionRouting = ({ userRole }) => {
                 </div>
               </div>
               <div className="form-group">
+                <label>Centro de Trabajo</label>
+                <input 
+                  type="text" 
+                  value={formData.work_center}
+                  readOnly
+                  placeholder="Se autollena al seleccionar máquina"
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                />
+              </div>
+              <div className="form-group">
                 <label>Tiempo Std (Min/Pza)</label>
                 <input 
                   type="number" 
