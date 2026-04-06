@@ -27,13 +27,14 @@ const ProductionRouting = ({ userRole }) => {
   const [editingId, setEditingId] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null, mode: 'initial' }); // modes: initial | deactivate
   const [copyModal, setCopyModal] = useState({ show: false, sourcePartId: null, targetPartId: '' });
+  const [showMachineDropdown, setShowMachineDropdown] = useState(false);
   const [formData, setFormData] = useState({
     part_number_id: '',
     sequence: '',
     operation_name: '',
     machine_area: '',
     work_center: '',
-    selected_machines: [],
+    selected_machine: '',
     standard_time_minutes: '',
     setup_time_minutes: 0,
     is_final_operation: false,
@@ -47,18 +48,30 @@ const ProductionRouting = ({ userRole }) => {
     fetchMachines();
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showMachineDropdown && !e.target.closest('.machine-dropdown')) {
+        setShowMachineDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showMachineDropdown]);
+
   const fetchPartNumbers = async () => {
     const { data } = await supabase.from('part_numbers').select('id, part_number, description').eq('is_active', true);
     if (data) setPartNumbers(data);
   };
 
   const fetchMachines = async () => {
-    const machineList = [
-      'L001', 'L002', 'L003', 'L004', 'L005', 'L006', 'L007', 'L008', 'L009', 'L010', 'L011', 'L012', 'L013',
-      'M001', 'M002', 'M003', 'M004', 'M005', 'M006', 'M007', 'M008', 'M009', 'M010', 'M011', 'M012', 'M013', 'M014',
-      'J001', 'Z001', 'C001', 'Q001'
-    ];
-    setMachines(machineList.map(m => ({ work_center: m, machine_area: '' })));
+    const { data } = await supabase
+      .from('maquinas')
+      .select('id, tipo, estado')
+      .order('id');
+    
+    if (data) {
+      setMachines(data);
+    }
   };
 
   const fetchRoutings = async () => {
@@ -94,8 +107,8 @@ const ProductionRouting = ({ userRole }) => {
     const sub = parts.length > 1 ? parseInt(parts[1], 10) || 0 : null;
     const finalStr = sub ? `${base}-${sub}` : `${base}`;
 
-    const firstMachine = formData.selected_machines[0];
-    const machineArea = firstMachine ? machines.find(m => m.work_center === firstMachine)?.machine_area || '' : formData.machine_area;
+    const selectedMachine = formData.selected_machine;
+    const machineType = selectedMachine ? machines.find(m => m.id === selectedMachine)?.tipo || '' : formData.machine_area;
 
     const dataToSave = {
       ...formData,
@@ -105,9 +118,8 @@ const ProductionRouting = ({ userRole }) => {
       sequence_str: finalStr,
       standard_time_minutes: parseFloat(formData.standard_time_minutes) || 0,
       setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0,
-      machine_area: machineArea,
-      selected_machines: formData.selected_machines,
-      work_center: formData.selected_machines.join(', ')
+      machine_area: machineType,
+      work_center: formData.selected_machine
     };
 
     if (editingId) {
@@ -127,14 +139,13 @@ const ProductionRouting = ({ userRole }) => {
 
   const handleEdit = (routing) => {
     setEditingId(routing.id);
-    const savedMachines = routing.selected_machines || (routing.work_center ? routing.work_center.split(',').map(m => m.trim()) : []);
     setFormData({
       part_number_id: routing.part_number_id,
       sequence: routing.sequence_str || routing.sequence,
       operation_name: routing.operation_name,
       machine_area: routing.machine_area,
       work_center: routing.work_center || '',
-      selected_machines: savedMachines,
+      selected_machine: routing.work_center || '',
       standard_time_minutes: routing.standard_time_minutes,
       setup_time_minutes: routing.setup_time_minutes || 0,
       is_final_operation: routing.is_final_operation || false,
@@ -223,7 +234,7 @@ const ProductionRouting = ({ userRole }) => {
       operation_name: '',
       machine_area: '',
       work_center: '',
-      selected_machines: [],
+      selected_machine: '',
       standard_time_minutes: '',
       setup_time_minutes: 0,
       is_final_operation: false,
@@ -417,31 +428,66 @@ const ProductionRouting = ({ userRole }) => {
                 />
               </div>
               <div className="form-group">
-                <label>Máquina(s)</label>
-                <select 
-                  multiple
-                  value={formData.selected_machines}
-                  onChange={(e) => {
-                    const selected = Array.from(e.target.selectedOptions, option => option.value);
-                    setFormData({...formData, selected_machines: selected, work_center: selected.join(', ')});
-                  }}
-                  style={{ 
-                    width: '100%', 
-                    padding: '0.75rem', 
-                    borderRadius: '8px', 
-                    border: '1px solid var(--border)', 
-                    background: '#111827', 
-                    color: 'var(--text)',
-                    height: '120px'
-                  }}
-                >
-                  {machines.map(m => (
-                    <option key={m.work_center} value={m.work_center}>
-                      {m.work_center}
-                    </option>
-                  ))}
-                </select>
-                <small style={{ color: 'var(--text-muted)' }}>Selecciona una o más máquinas (Ctrl+Click)</small>
+                <label>Máquina</label>
+                <div className="machine-dropdown" style={{ position: 'relative' }}>
+                  <input 
+                    type="text" 
+                    value={formData.selected_machine}
+                    onClick={() => setShowMachineDropdown(!showMachineDropdown)}
+                    readOnly
+                    placeholder="Selecciona una máquina..."
+                    style={{ 
+                      width: '100%', 
+                      padding: '0.75rem', 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border)', 
+                      background: '#111827', 
+                      color: 'var(--text)',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  {showMachineDropdown && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      background: '#1a1a2e',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                      zIndex: 1000,
+                      marginTop: '4px'
+                    }}>
+                      {machines.map(m => (
+                        <div 
+                          key={m.id}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              selected_machine: m.id,
+                              work_center: m.id
+                            });
+                            setShowMachineDropdown(false);
+                          }}
+                          style={{
+                            padding: '0.75rem',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid var(--border)',
+                            display: 'flex',
+                            justifyContent: 'space-between'
+                          }}
+                          onMouseEnter={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.2)'}
+                          onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                        >
+                          <span>{m.id}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{m.tipo || 'Sin tipo'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="form-group">
                 <label>Tiempo Std (Min/Pza)</label>
