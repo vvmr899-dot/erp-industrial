@@ -108,7 +108,7 @@ const ProductionRouting = ({ userRole }) => {
     const finalStr = sub ? `${base}-${sub}` : `${base}`;
 
     const selectedMachine = formData.selected_machine;
-    const machineType = selectedMachine ? machines.find(m => m.id === selectedMachine)?.tipo || '' : formData.machine_area;
+    const machineType = formData.work_center || formData.machine_area;
 
     const dataToSave = {
       ...formData,
@@ -467,7 +467,7 @@ const ProductionRouting = ({ userRole }) => {
                             setFormData({
                               ...formData,
                               selected_machine: m.id,
-                              work_center: m.id
+                              work_center: m.tipo || ''
                             });
                             setShowMachineDropdown(false);
                           }}
