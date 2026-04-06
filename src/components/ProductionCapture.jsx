@@ -68,6 +68,14 @@ const ProductionCapture = ({ userRole }) => {
   }, []);
 
   useEffect(() => {
+    if (selectedOrderId) {
+      fetchWIP(selectedOrderId);
+      fetchOrderDetails(selectedOrderId);
+      setSelectedStepId('');
+    }
+  }, [selectedOrderId]);
+
+  useEffect(() => {
     const handleClickOutside = (e) => {
       if (showOperatorDropdown && !e.target.closest('.operator-dropdown')) {
         setShowOperatorDropdown(false);
@@ -76,11 +84,6 @@ const ProductionCapture = ({ userRole }) => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showOperatorDropdown]);
-      fetchWIP(selectedOrderId);
-      fetchOrderDetails(selectedOrderId);
-      setSelectedStepId('');
-    }
-  }, [selectedOrderId]);
 
   const fetchActiveOrders = async () => {
     const { data } = await supabase
