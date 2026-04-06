@@ -34,6 +34,8 @@ const ProductionCapture = ({ userRole }) => {
   const [submitting, setSubmitting] = useState(false);
   const [completedQty, setCompletedQty] = useState(0);
   const [toast, setToast] = useState(null);
+  const [operators, setOperators] = useState([]);
+  const [showOperatorDropdown, setShowOperatorDropdown] = useState(false);
   
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -62,10 +64,18 @@ const ProductionCapture = ({ userRole }) => {
 
   useEffect(() => {
     fetchActiveOrders();
+    fetchOperators();
   }, []);
 
   useEffect(() => {
-    if (selectedOrderId) {
+    const handleClickOutside = (e) => {
+      if (showOperatorDropdown && !e.target.closest('.operator-dropdown')) {
+        setShowOperatorDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showOperatorDropdown]);
       fetchWIP(selectedOrderId);
       fetchOrderDetails(selectedOrderId);
       setSelectedStepId('');
@@ -80,6 +90,15 @@ const ProductionCapture = ({ userRole }) => {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
     if (data) setOrders(data);
+  };
+
+  const fetchOperators = async () => {
+    const { data } = await supabase
+      .from('personal')
+      .select('id, nombre')
+      .eq('activo', true)
+      .order('nombre');
+    if (data) setOperators(data);
   };
 
   const fetchOrderDetails = async (orderId) => {
@@ -638,16 +657,51 @@ const fetchWIP = async (orderId) => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
                     <div className="form-group">
                       <label style={labelStyle}>Operador</label>
-                      <div style={{ position: 'relative' }}>
-                        <User size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                      <div className="operator-dropdown" style={{ position: 'relative' }}>
+                        <User size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', zIndex: 1 }} />
                         <input 
                           type="text" 
                           required 
-                          placeholder="Nombre del operador"
+                          placeholder="Selecciona un operador..."
                           value={formData.operator_name}
-                          onChange={(e) => setFormData({...formData, operator_name: e.target.value})}
-                          style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
+                          onClick={() => setShowOperatorDropdown(!showOperatorDropdown)}
+                          readOnly
+                          style={{ width: '100%', padding: '0.75rem 0.75rem 0.75rem 2.5rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)', cursor: 'pointer' }}
                         />
+                        {showOperatorDropdown && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            background: '#1a1a2e',
+                            border: '1px solid var(--border)',
+                            borderRadius: '8px',
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            zIndex: 1000,
+                            marginTop: '4px'
+                          }}>
+                            {operators.map(op => (
+                              <div 
+                                key={op.id}
+                                onClick={() => {
+                                  setFormData({...formData, operator_name: op.nombre});
+                                  setShowOperatorDropdown(false);
+                                }}
+                                style={{
+                                  padding: '0.75rem',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px solid var(--border)'
+                                }}
+                                onMouseEnter={(e) => e.target.style.background = 'rgba(99, 102, 241, 0.2)'}
+                                onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                              >
+                                {op.nombre}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="form-group">
