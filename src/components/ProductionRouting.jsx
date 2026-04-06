@@ -106,7 +106,8 @@ const ProductionRouting = ({ userRole }) => {
       standard_time_minutes: parseFloat(formData.standard_time_minutes) || 0,
       setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0,
       machine_area: machineArea,
-      selected_machines: formData.selected_machines
+      selected_machines: formData.selected_machines,
+      work_center: formData.selected_machines.join(', ')
     };
 
     if (editingId) {
@@ -126,7 +127,7 @@ const ProductionRouting = ({ userRole }) => {
 
   const handleEdit = (routing) => {
     setEditingId(routing.id);
-    const savedMachines = routing.selected_machines || [];
+    const savedMachines = routing.selected_machines || (routing.work_center ? routing.work_center.split(',').map(m => m.trim()) : []);
     setFormData({
       part_number_id: routing.part_number_id,
       sequence: routing.sequence_str || routing.sequence,
@@ -441,15 +442,6 @@ const ProductionRouting = ({ userRole }) => {
                   ))}
                 </select>
                 <small style={{ color: 'var(--text-muted)' }}>Selecciona una o más máquinas (Ctrl+Click)</small>
-              </div>
-              <div className="form-group">
-                <label>Centro de Trabajo</label>
-                <input 
-                  type="text" 
-                  value={formData.work_center}
-                  onChange={(e) => setFormData({...formData, work_center: e.target.value})}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                />
               </div>
               <div className="form-group">
                 <label>Tiempo Std (Min/Pza)</label>
