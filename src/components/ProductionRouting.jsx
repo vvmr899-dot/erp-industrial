@@ -20,6 +20,7 @@ const ProductionRouting = ({ userRole }) => {
   const isReadOnly = userRole === 'calidad';
   const [routings, setRoutings] = useState([]);
   const [partNumbers, setPartNumbers] = useState([]);
+  const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [filterPartId, setFilterPartId] = useState('');
@@ -32,6 +33,7 @@ const ProductionRouting = ({ userRole }) => {
     operation_name: '',
     machine_area: '',
     work_center: '',
+    selected_machines: [],
     standard_time_minutes: '',
     setup_time_minutes: 0,
     is_final_operation: false,
@@ -42,11 +44,33 @@ const ProductionRouting = ({ userRole }) => {
   useEffect(() => {
     fetchPartNumbers();
     fetchRoutings();
+    fetchMachines();
   }, []);
 
   const fetchPartNumbers = async () => {
     const { data } = await supabase.from('part_numbers').select('id, part_number, description').eq('is_active', true);
     if (data) setPartNumbers(data);
+  };
+
+  const fetchMachines = async () => {
+    const { data } = await supabase
+      .from('production_routing')
+      .select('work_center, machine_area')
+      .not('work_center', 'is', null)
+      .not('work_center', 'eq', '');
+    
+    if (data) {
+      const uniqueMachines = [];
+      const seen = new Set();
+      for (const m of data) {
+        const key = m.work_center;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueMachines.push({ work_center: m.work_center, machine_area: m.machine_area });
+        }
+      }
+      setMachines(uniqueMachines);
+    }
   };
 
   const fetchRoutings = async () => {
@@ -82,6 +106,9 @@ const ProductionRouting = ({ userRole }) => {
     const sub = parts.length > 1 ? parseInt(parts[1], 10) || 0 : null;
     const finalStr = sub ? `${base}-${sub}` : `${base}`;
 
+    const firstMachine = formData.selected_machines[0];
+    const machineArea = firstMachine ? machines.find(m => m.work_center === firstMachine)?.machine_area || '' : formData.machine_area;
+
     const dataToSave = {
       ...formData,
       sequence: base,
@@ -89,7 +116,9 @@ const ProductionRouting = ({ userRole }) => {
       sequence_sub: sub,
       sequence_str: finalStr,
       standard_time_minutes: parseFloat(formData.standard_time_minutes) || 0,
-      setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0
+      setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0,
+      machine_area: machineArea,
+      selected_machines: formData.selected_machines
     };
 
     if (editingId) {
@@ -109,12 +138,14 @@ const ProductionRouting = ({ userRole }) => {
 
   const handleEdit = (routing) => {
     setEditingId(routing.id);
+    const savedMachines = routing.selected_machines || [];
     setFormData({
       part_number_id: routing.part_number_id,
       sequence: routing.sequence_str || routing.sequence,
       operation_name: routing.operation_name,
       machine_area: routing.machine_area,
       work_center: routing.work_center || '',
+      selected_machines: savedMachines,
       standard_time_minutes: routing.standard_time_minutes,
       setup_time_minutes: routing.setup_time_minutes || 0,
       is_final_operation: routing.is_final_operation || false,
@@ -203,6 +234,7 @@ const ProductionRouting = ({ userRole }) => {
       operation_name: '',
       machine_area: '',
       work_center: '',
+      selected_machines: [],
       standard_time_minutes: '',
       setup_time_minutes: 0,
       is_final_operation: false,
@@ -396,14 +428,31 @@ const ProductionRouting = ({ userRole }) => {
                 />
               </div>
               <div className="form-group">
-                <label>Máquina / Área</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.machine_area}
-                  onChange={(e) => setFormData({...formData, machine_area: e.target.value})}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
-                />
+                <label>Máquina(s)</label>
+                <select 
+                  multiple
+                  value={formData.selected_machines}
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.selectedOptions, option => option.value);
+                    setFormData({...formData, selected_machines: selected, work_center: selected.join(', ')});
+                  }}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.75rem', 
+                    borderRadius: '8px', 
+                    border: '1px solid var(--border)', 
+                    background: '#111827', 
+                    color: 'var(--text)',
+                    height: '120px'
+                  }}
+                >
+                  {machines.map(m => (
+                    <option key={m.work_center} value={m.work_center}>
+                      {m.work_center} - {m.machine_area || 'Sin área'}
+                    </option>
+                  ))}
+                </select>
+                <small style={{ color: 'var(--text-muted)' }}>Selecciona una o más máquinas (Ctrl+Click)</small>
               </div>
               <div className="form-group">
                 <label>Centro de Trabajo</label>
