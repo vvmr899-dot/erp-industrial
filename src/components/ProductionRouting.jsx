@@ -448,7 +448,7 @@ const ProductionRouting = ({ userRole }) => {
                 >
                   {machines.map(m => (
                     <option key={m.work_center} value={m.work_center}>
-                      {m.work_center} - {m.machine_area || 'Sin área'}
+                      {m.work_center}
                     </option>
                   ))}
                 </select>
