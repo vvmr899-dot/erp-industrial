@@ -26,7 +26,7 @@ const UserManagement = ({ userRole }) => {
       setUsers(data || []);
     } catch (err) {
       console.error('Error fetching users:', err);
-      setError('Error al cargar la lista de usuarios');
+      setError('Error al cargar la lista de usuarios: ' + (err.message || err.code || 'Sin acceso a la tabla'));
     } finally {
       setLoading(false);
     }
