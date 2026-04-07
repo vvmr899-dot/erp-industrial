@@ -19,8 +19,11 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
     { id: 'orders', label: t.productionOrders, icon: ClipboardList },
     { id: 'wip', label: t.wipBalance, icon: Layout },
     { id: 'capture', label: t.productionCapture, icon: Layout },
-    { id: 'inventory', label: t.inventoryTitle, icon: ShoppingCart },
   ];
+
+  if (userRole !== 'supervisor') {
+    menuItems.push({ id: 'inventory', label: t.inventoryTitle, icon: ShoppingCart });
+  }
 
   if (userRole === 'admin') {
     menuItems.push({ id: 'users', label: t.userManagementTitle, icon: Users });
