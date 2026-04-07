@@ -136,6 +136,14 @@ function AppContent() {
   };
 
   const handleNavClick = (tab) => {
+    if (tab === 'users' && userRole === 'supervisor') {
+      alert('No tienes permisos para acceder a gestión de usuarios.');
+      return;
+    }
+    if (tab === 'quality' && userRole === 'supervisor') {
+      alert('No tienes permisos para acceder a control de calidad.');
+      return;
+    }
     setActiveTab(tab);
     setSidebarOpen(false);
   };
