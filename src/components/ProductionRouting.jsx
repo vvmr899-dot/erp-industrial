@@ -48,6 +48,32 @@ const ProductionRouting = ({ userRole }) => {
     fetchMachines();
   }, []);
 
+  const extraMachines = [
+    { id: 'FQC', tipo: 'CALIDAD', estado: 'Activa' },
+    { id: 'EMBALAJE', tipo: 'ALMACEN', estado: 'Activa' },
+    { id: 'OQC', tipo: 'ALMACEN', estado: 'Activa' },
+    { id: 'ENVIO', tipo: 'ALMACEN', estado: 'Activa' },
+  ];
+
+  const machineOptions = (() => {
+    const seen = new Set();
+    const out = [];
+
+    for (const m of machines || []) {
+      if (!m?.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push(m);
+    }
+
+    for (const m of extraMachines) {
+      if (!m?.id || seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push(m);
+    }
+
+    return out;
+  })();
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (showMachineDropdown && !e.target.closest('.machine-dropdown')) {
@@ -241,6 +267,7 @@ const ProductionRouting = ({ userRole }) => {
       instructions: '',
       active: true
     });
+    setOperationTouched(false);
   };
 
   // Group routings by part number for display
@@ -423,7 +450,10 @@ const ProductionRouting = ({ userRole }) => {
                   type="text" 
                   required
                   value={formData.operation_name}
-                  onChange={(e) => setFormData({...formData, operation_name: e.target.value})}
+                  onChange={(e) => {
+                    setOperationTouched(true);
+                    setFormData({ ...formData, operation_name: e.target.value });
+                  }}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
                 />
               </div>
@@ -460,15 +490,21 @@ const ProductionRouting = ({ userRole }) => {
                       zIndex: 1000,
                       marginTop: '4px'
                     }}>
-                      {machines.map(m => (
+                      {machineOptions.map(m => (
                         <div 
                           key={m.id}
                           onClick={() => {
-                            setFormData({
+                            const next = {
                               ...formData,
                               selected_machine: m.id,
                               work_center: m.tipo || ''
-                            });
+                            };
+
+                            if (!operationTouched && (!formData.operation_name || formData.operation_name === formData.selected_machine)) {
+                              next.operation_name = m.id;
+                            }
+
+                            setFormData(next);
                             setShowMachineDropdown(false);
                           }}
                           style={{
