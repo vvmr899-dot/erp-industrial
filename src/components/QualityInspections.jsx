@@ -1189,24 +1189,32 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
 
   const stats = {
     total: scrap.length,
-    totalPieces: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
-    pending: scrap.filter(s => isPendingState(getItemState(s))).length,
-    approved: scrap.filter(s => isApprovedState(getItemState(s))).length,
-    rejected: scrap.filter(s => isRejectedState(getItemState(s))).length,
+    // Metricas de Calidad (solo defectos reales; excluye FQC N/A)
+    pendingDefectPieces: scrap
+      .filter(s => isScrapDefectRecord(s) && isPendingState(getItemState(s)))
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    approvedDefectPieces: scrap
+      .filter(s => isScrapDefectRecord(s) && isApprovedState(getItemState(s)))
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    rejectedDefectPieces: scrap
+      .filter(s => isScrapDefectRecord(s) && isRejectedState(getItemState(s)))
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+
+    pending: scrap.filter(s => isScrapDefectRecord(s) && isPendingState(getItemState(s))).length,
+    approved: scrap.filter(s => isScrapDefectRecord(s) && isApprovedState(getItemState(s))).length,
+    rejected: scrap.filter(s => isScrapDefectRecord(s) && isRejectedState(getItemState(s))).length,
     
-    // Piece-based counts for more accurate industrial reporting
-    approvedPieces: scrap
-      .filter(s => isApprovedState(getItemState(s)))
-      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
-    rejectedPieces: scrap
-      .filter(s => isRejectedState(getItemState(s)))
-      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
-    
-    // Scrap real: solo cuando Calidad lo manda a Rechazo (y excluye registros FQC tipo N/A)
-    totalScrap: scrap
-      .filter(s => isRejectedState(getItemState(s)) && isScrapDefectRecord(s))
-      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    // Piezas inspeccionadas = aprobadas + rechazadas (defectos reales)
+    totalPieces: 0,
+    approvedPieces: 0,
+    rejectedPieces: 0,
+    totalScrap: 0,
   };
+
+  stats.approvedPieces = stats.approvedDefectPieces;
+  stats.rejectedPieces = stats.rejectedDefectPieces;
+  stats.totalPieces = stats.approvedPieces + stats.rejectedPieces;
+  stats.totalScrap = stats.rejectedPieces;
 
   // Add the computed rates for easy access in sub-components
   stats.approvedRate = stats.totalPieces > 0 ? ((stats.approvedPieces / stats.totalPieces) * 100).toFixed(1) : "0.0";
