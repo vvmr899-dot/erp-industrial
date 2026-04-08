@@ -21,9 +21,8 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose, userRole }) => {
     { id: 'capture', label: t.productionCapture, icon: Layout },
   ];
 
-  if (userRole !== 'supervisor') {
-    menuItems.push({ id: 'inventory', label: t.inventoryTitle, icon: ShoppingCart });
-  }
+  // Inventario: supervisor puede ver (solo lectura)
+  menuItems.push({ id: 'inventory', label: t.inventoryTitle, icon: ShoppingCart });
 
   if (userRole === 'admin') {
     menuItems.push({ id: 'users', label: t.userManagementTitle, icon: Users });

@@ -136,7 +136,7 @@ function AppContent() {
   };
 
   const handleNavClick = (tab) => {
-    if (userRole === 'supervisor' && ['users', 'quality', 'inventory'].includes(tab)) {
+    if (userRole === 'supervisor' && ['users', 'quality'].includes(tab)) {
       alert('No tienes permisos para acceder a este módulo.');
       return;
     }

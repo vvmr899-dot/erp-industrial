@@ -399,7 +399,8 @@ const EmptyState = ({ icon: Icon, message }) => (
 
 /* ─── INVENTARIO PRINCIPAL ──────────────────────────────────────── */
 const Inventory = ({ userRole }) => {
-  const isReadOnly = userRole === 'calidad';
+  const role = (userRole || '').toLowerCase();
+  const isReadOnly = role === 'calidad' || role === 'supervisor';
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
