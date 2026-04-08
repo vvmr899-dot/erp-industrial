@@ -243,6 +243,11 @@ const isPendingState = (state) => ["PENDING", "PENDIENTE"].includes(state);
 const isApprovedState = (state) => ["APPROVED", "APROBADO", "LIBERADO"].includes(state);
 const isRejectedState = (state) => ["REJECTED", "RECHAZADO", "NO RETRABAJADO"].includes(state);
 
+const isScrapDefectRecord = (item) => {
+  const dt = normalizeState(item?.defect_type);
+  return !!dt && dt !== "N/A" && dt !== "NA";
+};
+
 function StatCard({ label, value, sub, color }) {
   return (
     <div className="card" style={{ padding: "20px 24px", flex: 1, minWidth: 150 }}>
@@ -782,7 +787,9 @@ function ReporteScrap({ scrap, onRefresh, loading, t, onDelete }) {
   );
 
   const stats = {
-    totalScrap: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    totalScrap: scrap
+      .filter(s => isRejectedState(getItemState(s)) && isScrapDefectRecord(s))
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     items: scrap.length,
     pendingPieces: scrap
       .filter(s => isPendingState(getItemState(s)))
@@ -1195,7 +1202,10 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
       .filter(s => isRejectedState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     
-    totalScrap: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    // Scrap real: solo cuando Calidad lo manda a Rechazo (y excluye registros FQC tipo N/A)
+    totalScrap: scrap
+      .filter(s => isRejectedState(getItemState(s)) && isScrapDefectRecord(s))
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
   };
 
   // Add the computed rates for easy access in sub-components

@@ -219,6 +219,7 @@ export const translations = {
     qualityIndicators: "Indicadores de calidad",
     totalScrap: "Total Scrap",
     piezas: "pzs",
+    porRevisar: "por revisar",
     deleteRecord: "¿Eliminar Registro?",
     confirmDeleteRecord: "¿Seguro que deseas eliminar el reporte ligado a la orden {0}? Esta acción es irreversible y eliminará el historial asociado.",
     dispositionUpdated: "Disposición actualizada",
