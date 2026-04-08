@@ -611,14 +611,23 @@ function ModalInspeccion({ item, onClose, onGuardar, t, session, isReadOnly = fa
           </div>
           
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
-             <div>
-               <span className="label">Identificación de Orden</span>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 4 }}>
-                 <span style={{ color: G.accent, fontSize: '16px', fontWeight: 700 }}>{item.order?.order_number || "—"}</span>
-                 <span style={{ color: G.border, fontSize: '14px' }}>|</span>
-                 <span style={{ color: G.muted, fontSize: '13px', fontWeight: 600 }}>{item.order?.part_numbers?.part_number || "—"}</span>
-               </div>
-             </div>
+              <div>
+                <span className="label">Identificación de Orden</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 4 }}>
+                  <span style={{ color: G.accent, fontSize: '16px', fontWeight: 700 }}>{item.order?.order_number || "—"}</span>
+                  <span style={{ color: G.border, fontSize: '14px' }}>|</span>
+                  <span style={{ color: G.muted, fontSize: '13px', fontWeight: 600 }}>{item.order?.part_numbers?.part_number || "—"}</span>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <span className="label">{t.operation || "Operación"}</span>
+                  <div style={{ color: G.text, fontSize: '13px', fontWeight: 700 }}>
+                    {item.routing?.operation_name || item.operation_name || "—"}
+                    {item.routing?.sequence ? (
+                      <span style={{ color: G.muted, fontWeight: 600 }}> (SEQ {item.routing.sequence})</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
              <div style={{ textAlign: 'right' }}>
                <span className="label">Lote / Secuencia</span>
                <div style={{ marginTop: 4 }}>
