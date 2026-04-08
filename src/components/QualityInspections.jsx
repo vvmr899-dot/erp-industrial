@@ -774,11 +774,17 @@ function ReporteScrap({ scrap, onRefresh, loading, t, onDelete }) {
   );
 
   const stats = {
-    total: scrap.reduce((a, s) => a + (s.quantity || 0), 0),
+    totalScrap: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     items: scrap.length,
-    pending: scrap.filter(s => s.disposition === "Pending" || s.status === "Pendiente").length,
-    approved: scrap.filter(s => s.disposition === "Approved" || s.status === "APROBADO").length,
-    rejected: scrap.filter(s => s.disposition === "Rejected" || s.status === "RECHAZADO").length,
+    pendingPieces: scrap
+      .filter(s => s.disposition === "Pending" || s.status === "Pendiente")
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    approvedPieces: scrap
+      .filter(s => s.disposition === "Approved" || s.status === "APROBADO")
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
+    rejectedPieces: scrap
+      .filter(s => s.disposition === "Rejected" || s.status === "RECHAZADO")
+      .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
   };
 
   // Agrupar defectos
@@ -798,19 +804,19 @@ function ReporteScrap({ scrap, onRefresh, loading, t, onDelete }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, marginBottom: 28 }}>
         <div className="card" style={{ padding: 24, borderLeft: `4px solid ${G.red}` }}>
           <div className="label" style={{ marginBottom: 12 }}>Total Scrap</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: G.red, letterSpacing: '-0.02em' }}>{stats.total}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: G.red, letterSpacing: '-0.02em' }}>{stats.totalScrap}</div>
         </div>
         <div className="card" style={{ padding: 24, borderLeft: `4px solid ${G.amber}` }}>
           <div className="label" style={{ marginBottom: 12 }}>Pendientes</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: G.amber, letterSpacing: '-0.02em' }}>{stats.pending}</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: G.amber, letterSpacing: '-0.02em' }}>{stats.pendingPieces}</div>
         </div>
         <div className="card" style={{ padding: 24, borderLeft: `4px solid ${G.green}` }}>
-          <div className="label" style={{ marginBottom: 12 }}>Aprobados</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: G.green, letterSpacing: '-0.02em' }}>{stats.approved}</div>
+          <div className="label" style={{ marginBottom: 12 }}>Total Aprobado</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: G.green, letterSpacing: '-0.02em' }}>{stats.approvedPieces}</div>
         </div>
         <div className="card" style={{ padding: 24, borderLeft: `4px solid ${G.accent}` }}>
-          <div className="label" style={{ marginBottom: 12 }}>Rechazados</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: G.accent, letterSpacing: '-0.02em' }}>{stats.rejected}</div>
+          <div className="label" style={{ marginBottom: 12 }}>Total Rechazado</div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: G.accent, letterSpacing: '-0.02em' }}>{stats.rejectedPieces}</div>
         </div>
       </div>
 
