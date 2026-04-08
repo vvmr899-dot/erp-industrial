@@ -192,7 +192,7 @@ export const translations = {
     activeProductionEnabled: "(Producción Habilitada)",
     productionBlocked: "(Producción Bloqueada)",
     orderUpdated: "Orden actualizada con éxito",
-    orderDeleted: "Orden eliminada",
+    // orderDeleted ya existe en "Global & Orders"
     
     // Routing
     routingTitle: "Enrutamiento de Producción",
@@ -240,9 +240,8 @@ export const translations = {
     standardTime: "T. Estándar",
     noFinishedInventory: "No se detecta inventario de producto terminado aún.",
     deleteFromStorage: "Eliminar del Almacén",
-    adjustmentReason: "Ajuste por:",
     damagedProduct: "Producto dañado",
-    adjustmentDescription: "Descripción / Porque del ajuste *",
+    // adjustmentReason/adjustmentDescription ya existen en "Production Capture"
     searchCodeDescription: "Buscar por código o descripción...",
     
     // Alert
@@ -354,7 +353,7 @@ export const translations = {
     partRequired: "Part is required",
     orderSaved: "Order saved",
     orderDeleted: "Order deleted",
-    orderCreated: "Order created",
+    orderCreated: "Order created successfully",
     
     // Production
     productionCapture: "Production Capture",
@@ -461,7 +460,7 @@ export const translations = {
     rechazadas: "Rejected",
     requierenAccion: "need action",
     inspectionsToday: "Inspections Today",
-    pendingInspections: "Pending",
+    pendingInspections: "Pending Inspections",
     porRevisar: "to review",
     approvalRate: "Approval Rate",
     tasaAprobacion: "Approval Rate",
@@ -568,7 +567,6 @@ export const translations = {
     damagedMaterial: "Damaged material",
     selectOperationFirst: "-- Select --",
     operationHistory: "Operation History",
-    close: "Close",
     returnWip: "Return WIP",
     confirmReturn: "Confirm Return",
     returnWipMessage: "This action will subtract WIP from the operation",
@@ -589,15 +587,13 @@ export const translations = {
     ordersDescription: "Management and tracking of plant jobs.",
     noOrdersFound: "No orders registered.",
     noOrdersWithFilters: "No orders found with the applied filters.",
-    newOrder: "New Order",
     editProductionOrder: "Edit Production Order",
     orderActive: "Active Order",
     orderInactive: "Inactive Order",
     activeProductionEnabled: "(Production Enabled)",
     productionBlocked: "(Production Blocked)",
     orderUpdated: "Order updated successfully",
-    orderCreated: "Order created successfully",
-    orderDeleted: "Order deleted",
+    // orderCreated/orderDeleted ya existen en "Orders & Global"
     
     // Routing
     routingTitle: "Production Routing",
@@ -611,9 +607,8 @@ export const translations = {
     operationHasHistory: "This operation already has history (WIP, captures or scrap) and cannot be deleted from the database.",
     
     // Quality
-    qualityTitle: "Quality Control",
     qualityDescription: "Inspection and quality control module.",
-    pendingInspections: "Pending Inspection",
+    // qualityTitle/pendingInspections ya existen en "Quality Module"
     approvedByQuality: "Approved by Quality",
     deleteRecord: "Delete Record?",
     confirmDeleteRecord: "Are you sure you want to delete the report linked to order {0}? This action is irreversible and will delete the associated history.",
@@ -630,24 +625,22 @@ export const translations = {
     noPartsRegistered: "No part numbers registered.",
     newPartNumber: "Add Part Number",
     editPartNumber: "Edit Part Number",
-    partNumberLabel: "Part Number",
+    // partNumberLabel ya existe en "Scrap & Quality"
     partDescriptionLabel: "Description",
     deletePartNumber: "Delete Part Number?",
     partCodeExists: "A part number with this code already exists",
     
     // Inventory
-    inventoryTitle: "Inventory",
     inventoryDescription: "Warehouse and inventory management.",
     infoTab: "Information",
     partCode: "Part Code",
-    partDescription: "Description",
     noProductionOrders: "No production orders for this product.",
     standardTime: "Std Time",
     noFinishedInventory: "No finished product inventory detected yet.",
     deleteFromStorage: "Delete from Storage",
-    adjustmentReason: "Adjustment for:",
+    // inventoryTitle/partDescription/adjustmentReason ya existen en secciones previas
     damagedProduct: "Damaged product",
-    adjustmentDescription: "Description / Reason for adjustment *",
+    // adjustmentDescription ya existe en "Production Capture"
     searchCodeDescription: "Search by code or description...",
     
     // Alert
@@ -656,7 +649,16 @@ export const translations = {
     alertMessage2: "Please address these rejections in the Quality Control module before continuing production.",
     alertButton: "GO TO QUALITY",
     alertAcknowledge: "Understood",
-    
+  },
+
+  /*
+   * NOTE:
+   * The block below was duplicated and mixed languages (en/zh), which caused
+   * duplicate-key build warnings and incorrect translations at runtime.
+   * It is intentionally commented out.
+   */
+
+  /*
     // Dashboard Labels
     dashboardOrders: "Orders",
     dashboardProduction: "Production",
@@ -902,38 +904,8 @@ export const translations = {
     alertAcknowledge: "明白",
   },
   
-  zh: {
-    or: "or",
-    and: "and",
-    with: "with",
-    from: "from",
-    to: "to",
-    in: "in",
-    the: "the",
-    by: "by",
-    time: "Time",
-    datetime: "Date/Time",
-    code: "Code",
-    value: "Value",
-    amount: "Amount",
-    percentage: "Percentage",
-    required: "Required",
-    optional: "Optional",
-    noResults: "No results",
-    refresh: "Refresh",
-    back: "Back",
-    next: "Next",
-    previous: "Previous",
-    first: "First",
-    last: "Last",
-    page: "Page",
-    perPage: "per page",
-    rowsPerPage: "Rows per page",
-    showEntries: "Show entries",
-    showing: "Showing",
-    entries: "entries"
-  },
-  
+  */
+
   zh: {
     // App
     appName: "ERP系统",
