@@ -235,6 +235,14 @@ const fmtDateShort = (dateStr) => {
   return d.toLocaleDateString("es-MX", { day: "2-digit", month: "numeric" });
 };
 
+const normalizeState = (v) => (v || "").toString().trim().toUpperCase();
+
+const getItemState = (item) => normalizeState(item?.status || item?.disposition);
+
+const isPendingState = (state) => ["PENDING", "PENDIENTE"].includes(state);
+const isApprovedState = (state) => ["APPROVED", "APROBADO", "LIBERADO"].includes(state);
+const isRejectedState = (state) => ["REJECTED", "RECHAZADO", "NO RETRABAJADO"].includes(state);
+
 function StatCard({ label, value, sub, color }) {
   return (
     <div className="card" style={{ padding: "20px 24px", flex: 1, minWidth: 150 }}>
@@ -777,20 +785,20 @@ function ReporteScrap({ scrap, onRefresh, loading, t, onDelete }) {
     totalScrap: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     items: scrap.length,
     pendingPieces: scrap
-      .filter(s => s.disposition === "Pending" || s.status === "Pendiente")
+      .filter(s => isPendingState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     approvedPieces: scrap
-      .filter(s => s.disposition === "Approved" || s.status === "APROBADO")
+      .filter(s => isApprovedState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     rejectedPieces: scrap
-      .filter(s => s.disposition === "Rejected" || s.status === "RECHAZADO")
+      .filter(s => isRejectedState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
   };
 
   // Agrupar defectos
   const defectosPorTipo = filtered.reduce((acc, s) => {
     const tipo = s.defect_type || "Sin clasificar";
-    acc[tipo] = (acc[tipo] || 0) + (s.quantity || 0);
+    acc[tipo] = (acc[tipo] || 0) + (Number(s.quantity) || 0);
     return acc;
   }, {});
 
@@ -1175,16 +1183,16 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   const stats = {
     total: scrap.length,
     totalPieces: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
-    pending: scrap.filter(s => ["Pending", "Pendiente"].includes(s.status || s.disposition)).length,
-    approved: scrap.filter(s => ["Approved", "APROBADO", "Liberado"].includes(s.status || s.disposition)).length,
-    rejected: scrap.filter(s => ["Rejected", "RECHAZADO", "No Retrabajado"].includes(s.status || s.disposition)).length,
+    pending: scrap.filter(s => isPendingState(getItemState(s))).length,
+    approved: scrap.filter(s => isApprovedState(getItemState(s))).length,
+    rejected: scrap.filter(s => isRejectedState(getItemState(s))).length,
     
     // Piece-based counts for more accurate industrial reporting
     approvedPieces: scrap
-      .filter(s => ["Approved", "APROBADO", "Liberado"].includes(s.status || s.disposition))
+      .filter(s => isApprovedState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     rejectedPieces: scrap
-      .filter(s => ["Rejected", "RECHAZADO", "No Retrabajado"].includes(s.status || s.disposition))
+      .filter(s => isRejectedState(getItemState(s)))
       .reduce((a, s) => a + (Number(s.quantity) || 0), 0),
     
     totalScrap: scrap.reduce((a, s) => a + (Number(s.quantity) || 0), 0),
@@ -1234,7 +1242,7 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
           
           {tab === "inspecciones" && (
             <ListaInspecciones
-              scrap={scrap.filter(s => ["Pending", "Pendiente"].includes(s.status || s.disposition))}
+               scrap={scrap.filter(s => isPendingState(getItemState(s)))}
               onInspeccionar={handleInspeccionar}
               onRefresh={fetchScrap}
               loading={loading}
@@ -1247,7 +1255,7 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
 
           {tab === "aprobadas" && (
             <ListaInspecciones
-              scrap={scrap.filter(s => ["Approved", "APROBADO", "Liberado"].includes(s.status || s.disposition))}
+               scrap={scrap.filter(s => isApprovedState(getItemState(s)))}
               onInspeccionar={handleInspeccionar}
               onRefresh={fetchScrap}
               loading={loading}
@@ -1260,7 +1268,7 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
 
           {tab === "rechazadas" && (
             <ListaInspecciones
-              scrap={scrap.filter(s => ["Rejected", "RECHAZADO", "No Retrabajado"].includes(s.status || s.disposition))}
+               scrap={scrap.filter(s => isRejectedState(getItemState(s)))}
               onInspeccionar={handleInspeccionar}
               onRefresh={fetchScrap}
               loading={loading}
