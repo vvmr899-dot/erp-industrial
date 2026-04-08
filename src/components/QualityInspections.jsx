@@ -259,8 +259,8 @@ function Dashboard({ data, t }) {
       <div className="dashboard-stats" style={{ display: "flex", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <StatCard label={t.totalInspections} value={data.totalPieces} sub={t.piezas} />
         <StatCard label={t.pendingInspections} value={data.pending} sub={t.porRevisar} color={G.amber} />
-        <StatCard label={t.approvedPieces} value={data.approvedPieces} sub={`${tasaAprobacion}%`} color={G.green} />
-        <StatCard label={t.rejectedPieces} value={data.rejectedPieces} sub={`${tasaRechazo}%`} color={G.red} />
+        <StatCard label={t.approvedPieces} value={data.approvedPieces} sub={t.piezas} color={G.green} />
+        <StatCard label={t.rejectedPieces} value={data.rejectedPieces} sub={t.piezas} color={G.red} />
         <StatCard label={t.totalScrap} value={data.totalScrap} sub={t.piezas} color={G.red} />
       </div>
 
