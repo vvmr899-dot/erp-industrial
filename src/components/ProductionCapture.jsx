@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/translations';
 import { 
@@ -25,6 +25,7 @@ import {
 
 const ProductionCapture = ({ userRole }) => {
   const { t } = useLanguage();
+  const DEBUG = import.meta.env.DEV;
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [wipSteps, setWipSteps] = useState([]);
@@ -32,6 +33,7 @@ const ProductionCapture = ({ userRole }) => {
   const [selectedStepId, setSelectedStepId] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
   const [completedQty, setCompletedQty] = useState(0);
   const [toast, setToast] = useState(null);
   const [operators, setOperators] = useState([]);
@@ -66,6 +68,69 @@ const ProductionCapture = ({ userRole }) => {
     fetchActiveOrders();
     fetchOperators();
   }, []);
+
+  useEffect(() => {
+    if (!selectedOrderId) return;
+
+    const selectedOrder = orders.find(o => o.id === selectedOrderId);
+    if (!selectedOrder?.part_number_id) return;
+
+    const partNumberId = selectedOrder.part_number_id;
+
+    const channel = supabase
+      .channel('production-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'production_routing',
+          filter: `part_number_id=eq.${partNumberId}`
+        },
+        async (payload) => {
+          if (DEBUG) console.log('[Realtime] Cambio en routing:', payload.eventType, payload);
+          
+          setSelectedStepId('');
+          
+          await fetchWIP(selectedOrderId);
+          await fetchOrderDetails(selectedOrderId);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'production_wip_balance'
+        },
+        async (payload) => {
+          if (payload.new?.production_order_id === selectedOrderId || 
+              payload.old?.production_order_id === selectedOrderId) {
+            if (DEBUG) console.log('[Realtime] Cambio en WIP:', payload.eventType, payload);
+            await fetchWIP(selectedOrderId);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'production_operation_log',
+          filter: `production_order_id=eq.${selectedOrderId}`
+        },
+        async (payload) => {
+          if (DEBUG) console.log('[Realtime] Nueva captura:', payload.new);
+          await fetchWIP(selectedOrderId);
+          await fetchOrderDetails(selectedOrderId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedOrderId, orders]);
 
   useEffect(() => {
     if (selectedOrderId) {
@@ -108,26 +173,53 @@ const ProductionCapture = ({ userRole }) => {
     const selectedOrder = orders.find(o => o.id === orderId);
     if (!selectedOrder) return;
 
-    // Calculate "Completado" based on actual inventory transactions
-    // This allows synchronization if a record is deleted from Finished Goods
-    const { data: invData, error: invErr } = await supabase
-      .from('inventory_transactions')
-      .select('quantity')
-      .eq('production_order_id', orderId)
-      .eq('transaction_type', 'FINISHED_GOODS_RECEIPT');
-
-    if (invErr) {
-      console.error("Error fetching inventory for completed qty:", invErr);
+    // "Completado" debe reflejar lo que existe en inventario (producto terminado)
+    // para el numero de parte de la orden.
+    const partNumberId = selectedOrder.part_number_id;
+    if (!partNumberId) {
       setCompletedQty(0);
-    } else {
-      const total = invData?.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0) || 0;
-      setCompletedQty(total);
+      return;
+    }
+
+    const { data: stockRow, error: stockErr } = await supabase
+      .from('inventory_stock')
+      .select('quantity')
+      .eq('part_number_id', partNumberId)
+      .single();
+
+    if (stockErr) {
+      // PGRST116 = No rows found
+      if (stockErr.code === 'PGRST116') {
+        setCompletedQty(0);
+      } else {
+        console.error('Error fetching inventory_stock for completed qty:', stockErr);
+        setCompletedQty(0);
+      }
+      return;
+    }
+
+    setCompletedQty(parseFloat(stockRow?.quantity) || 0);
+  };
+
+  const handleSyncRoute = async () => {
+    if (!selectedOrderId || loading) return;
+    try {
+      setSelectedStepId('');
+      await fetchActiveOrders();
+      await fetchWIP(selectedOrderId);
+      await fetchOrderDetails(selectedOrderId);
+      setToast({ type: 'success', message: t.routeSynced || 'Ruta sincronizada correctamente' });
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      if (DEBUG) console.error('[handleSyncRoute] Error:', err);
+      setToast({ type: 'error', message: (t.transactionError || 'Error en la transacción: ') + (err?.message || 'Error') });
+      setTimeout(() => setToast(null), 3000);
     }
   };
 
 const fetchWIP = async (orderId) => {
     setLoading(true);
-    console.log('[fetchWIP] Iniciando para orderId:', orderId);
+    if (DEBUG) console.log('[fetchWIP] Iniciando para orderId:', orderId);
     
     const { data: orderData } = await supabase
       .from('production_orders')
@@ -140,29 +232,54 @@ const fetchWIP = async (orderId) => {
       return;
     }
     
-    console.log('[fetchWIP] Order part_number_id:', orderData.part_number_id);
+    if (DEBUG) console.log('[fetchWIP] Order part_number_id:', orderData.part_number_id);
     
     const { data: routingData } = await supabase
       .from('production_routing')
       .select('id, sequence, sequence_base, sequence_sub, sequence_str, operation_name, machine_area, work_center, is_final_operation')
       .eq('part_number_id', orderData.part_number_id)
+      // Mantener consistencia con el modulo de Rutas: solo operaciones activas
+      .or('active.is.null,active.eq.true')
       .order('sequence_base', { nullsFirst: false })
       .order('sequence_sub', { nullsFirst: true })
       .order('sequence', { nullsFirst: false });
     
-    console.log('[fetchWIP] Routing actual desde DB:', routingData);
+    if (DEBUG) console.log('[fetchWIP] Routing actual desde DB:', routingData?.length, routingData?.map(r => r.operation_name));
+    
+    const routingIds = routingData ? routingData.map(r => r.id) : [];
+    
+    const { data: wipData } = await supabase
+      .from('production_wip_balance')
+      .select('*')
+      .eq('production_order_id', orderId);
+    
+    if (DEBUG) console.log('[fetchWIP] WIP actual en BD:', wipData?.length);
+    
+    const orphanedWip = [];
+    const validWip = [];
+    
+    if (wipData) {
+      wipData.forEach(w => { 
+        if (routingIds.includes(w.routing_id)) {
+          validWip.push(w);
+        } else {
+          orphanedWip.push(w.id);
+        }
+      });
+    }
+    
+    if (orphanedWip.length > 0) {
+      if (DEBUG) console.log('[fetchWIP] Limpiando entradas WIP huérfanas:', orphanedWip);
+      await supabase
+        .from('production_wip_balance')
+        .delete()
+        .in('id', orphanedWip);
+    }
+    
+    const wipMap = {};
+    validWip.forEach(w => { wipMap[w.routing_id] = w; });
     
     if (routingData && routingData.length > 0) {
-      const { data: wipData } = await supabase
-        .from('production_wip_balance')
-        .select('*')
-        .eq('production_order_id', orderId);
-      
-      const wipMap = {};
-      if (wipData) {
-        wipData.forEach(w => { wipMap[w.routing_id] = w; });
-      }
-      
       const merged = routingData.map(r => {
         const existingWip = wipMap[r.id];
         if (existingWip) {
@@ -189,10 +306,11 @@ const fetchWIP = async (orderId) => {
         };
       });
       
-      console.log('[fetchWIP] Resultado final merged:', merged.map(s => ({ id: s.id, operation_name: s.operation_name, routing_id: s.routing_id })));
+      if (DEBUG) console.log('[fetchWIP] Resultado final merged:', merged.length, merged.map(s => ({ id: s.id, name: s.operation_name })));
       setWipSteps(merged);
     } else {
       setWipSteps([]);
+      if (DEBUG) console.log('[fetchWIP] No hay rutas, WIP limpiado');
     }
     setLoading(false);
   };
@@ -324,31 +442,33 @@ const fetchWIP = async (orderId) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!currentStep) return;
 
-    if (captureRestricted) {
-      alert(captureRestrictionMessage);
-      return;
-    }
-
-    const good = parseFloat(formData.quantity_good) || 0;
-    const bad = parseFloat(formData.quantity_bad) || 0;
-    const total = good + bad;
-
-    if (total > totalAvailableForCapture) {
-      alert(`No hay suficiente WIP disponible. Total disponible (Disp + Proc): ${totalAvailableForCapture} piezas.`);
-      return;
-    }
-
-    if (bad > 0 && (!formData.lot_number || formData.lot_number.trim() === '')) {
-      alert('Por favor especifica el Lote o Secuencia de Lote de las piezas rechazadas.');
-      return;
-    }
-
-
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
     setSubmitting(true);
 
     try {
+      if (!currentStep) return;
+
+      if (captureRestricted) {
+        alert(captureRestrictionMessage);
+        return;
+      }
+
+      const good = parseFloat(formData.quantity_good) || 0;
+      const bad = parseFloat(formData.quantity_bad) || 0;
+      const total = good + bad;
+
+      if (total > totalAvailableForCapture) {
+        alert(`No hay suficiente WIP disponible. Total disponible (Disp + Proc): ${totalAvailableForCapture} piezas.`);
+        return;
+      }
+
+      if (bad > 0 && (!formData.lot_number || formData.lot_number.trim() === '')) {
+        alert('Por favor especifica el Lote o Secuencia de Lote de las piezas rechazadas.');
+        return;
+      }
+
       const { error: errLog } = await supabase.from('production_operation_log').insert({
         production_order_id: selectedOrderId,
         routing_id: currentStep.routing_id,
@@ -365,56 +485,11 @@ const fetchWIP = async (orderId) => {
 
       if (errLog) throw new Error(errLog.message);
 
-      // Si hay piezas buenas y es ENVIO, pasar a inventario
+      // Si hay piezas buenas y es ENVIO, el trigger de la base de datos
+      // (trg_update_inventory_on_envio) maneja automáticamente el movimiento a inventario.
+      // No agregar lógica adicional aquí para evitar duplicación.
       if (good > 0 && currentStep?.operation_name?.toUpperCase().includes('ENVIO')) {
-        const partNumberId = selectedOrder?.part_number_id || selectedOrder?.numeros_parte?.id;
-        
-        if (!partNumberId) {
-          throw new Error('No se encontró el ID del número de parte para actualizar inventario');
-        }
-        
-        try {
-          // Registrar transacción de entrada a inventario
-          const { error: txError } = await supabase.from('inventory_transactions').insert({
-            part_number_id: partNumberId,
-            production_order_id: selectedOrderId,
-            transaction_type: 'FINISHED_GOODS_RECEIPT',
-            quantity: good
-          });
-
-          if (txError) throw txError;
-
-          // Actualizar o insertar en inventory_stock
-          const { data: existingStock, error: stockError } = await supabase
-            .from('inventory_stock')
-            .select('id, quantity')
-            .eq('part_number_id', partNumberId)
-            .single();
-
-          if (stockError && stockError.code !== 'PGRST116') {
-            throw stockError;
-          }
-
-          if (existingStock) {
-            const { error: updateError } = await supabase
-              .from('inventory_stock')
-              .update({ 
-                quantity: existingStock.quantity + good,
-                last_updated: new Date().toISOString()
-              })
-              .eq('id', existingStock.id);
-            if (updateError) throw updateError;
-          } else {
-            const { error: insertError } = await supabase.from('inventory_stock').insert({
-              part_number_id: partNumberId,
-              quantity: good
-            });
-            if (insertError) throw insertError;
-          }
-        } catch (inventoryError) {
-          console.error('Error en transacción de inventario:', inventoryError);
-          throw new Error('Falló la actualización de inventario. La producción fue registrada pero no se actualizó el stock.');
-        }
+        if (DEBUG) console.log('[ENVIO] Piezas buenas:', good, '- El trigger de BD actualizará el inventario');
       }
 
       if (!currentStep) {
@@ -464,6 +539,7 @@ const fetchWIP = async (orderId) => {
       setTimeout(() => setToast(null), 3000);
     } finally {
       setSubmitting(false);
+      submitLockRef.current = false;
     }
   };
 
@@ -559,21 +635,23 @@ const fetchWIP = async (orderId) => {
                       <option key={o.id} value={o.id}>{o.order_number} - {o.part_numbers?.part_number}</option>
                     ))}
                   </select>
-                  {selectedOrderId && (
-                    <button 
-                      type="button"
-                      onClick={() => { 
-                        fetchWIP(selectedOrderId); 
-                        fetchOrderDetails(selectedOrderId); 
-                        setToast({ type: 'success', message: 'Ruta sincronizada correctamente' });
-                        setTimeout(() => setToast(null), 3000);
-                      }}
-                      style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#1f2937', color: 'var(--text-muted)', cursor: 'pointer' }}
-                      title="Sincronizar ruta"
-                    >
-                      <RefreshCcw size={18} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleSyncRoute}
+                    disabled={!selectedOrderId || loading}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: !selectedOrderId || loading ? '#1f2937' : 'rgba(99, 102, 241, 0.16)',
+                      color: !selectedOrderId || loading ? 'var(--text-muted)' : 'var(--text)',
+                      cursor: !selectedOrderId || loading ? 'not-allowed' : 'pointer',
+                      opacity: !selectedOrderId || loading ? 0.7 : 1,
+                    }}
+                    title={t.syncRoute || 'Sincronizar ruta'}
+                  >
+                    <RefreshCcw size={18} />
+                  </button>
                 </div>
               </div>
 
