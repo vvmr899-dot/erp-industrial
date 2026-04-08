@@ -469,19 +469,23 @@ const fetchWIP = async (orderId) => {
         return;
       }
 
-      const { error: errLog } = await supabase.from('production_operation_log').insert({
-        production_order_id: selectedOrderId,
-        routing_id: currentStep.routing_id,
-        operator_name: formData.operator_name,
-        shift: formData.shift,
-        quantity_reported: total,
-        quantity_good: good,
-        quantity_defects: bad,
-        defect_type: formData.defect_type,
-        defect_notes: formData.defect_notes,
-        lot_number: formData.lot_number,
-        is_rework: formData.is_rework
-      });
+      const { data: opLog, error: errLog } = await supabase
+        .from('production_operation_log')
+        .insert({
+          production_order_id: selectedOrderId,
+          routing_id: currentStep.routing_id,
+          operator_name: formData.operator_name,
+          shift: formData.shift,
+          quantity_reported: total,
+          quantity_good: good,
+          quantity_defects: bad,
+          defect_type: formData.defect_type,
+          defect_notes: formData.defect_notes,
+          lot_number: formData.lot_number,
+          is_rework: formData.is_rework
+        })
+        .select('id, created_at')
+        .single();
 
       if (errLog) throw new Error(errLog.message);
 
@@ -498,33 +502,107 @@ const fetchWIP = async (orderId) => {
 
       const isActualFQC = currentStep?.operation_name?.toUpperCase().includes('FQC');
 
+      const hasRecentDuplicateScrap = async ({
+        productionOrderId,
+        routingId,
+        quantity,
+        operatorName,
+        lotNumber,
+        status,
+        defectType,
+        sinceISO,
+      }) => {
+        const base = supabase
+          .from('production_scrap')
+          .select('id')
+          .eq('production_order_id', productionOrderId)
+          .eq('routing_id', routingId)
+          .eq('quantity', quantity)
+          .eq('operator_name', operatorName)
+          .eq('status', status)
+          .gte('created_at', sinceISO)
+          .limit(1);
+
+        // Intento 1: match estricto (incluye lote y tipo)
+        let q1 = base;
+        if (lotNumber) q1 = q1.eq('lot_number', lotNumber);
+        if (defectType) q1 = q1.eq('defect_type', defectType);
+
+        const { data: d1, error: e1 } = await q1;
+        if (e1) throw e1;
+        if ((d1 || []).length > 0) return true;
+
+        // Intento 2: match laxo (por si un trigger guarda campos diferentes)
+        const { data: d2, error: e2 } = await base;
+        if (e2) throw e2;
+        return (d2 || []).length > 0;
+      };
+
       // Si se reportaron piezas con defectos, las registramos en Calidad (production_scrap)
       if (bad > 0) {
-        await supabase.from('production_scrap').insert({
-          production_order_id: selectedOrderId,
-          routing_id: currentStep.routing_id,
-          defect_type: formData.defect_type || (isActualFQC ? 'FQC Rechazo' : 'Pendiente de clasificar'),
+        const defectType = formData.defect_type || (isActualFQC ? 'FQC Rechazo' : 'Pendiente de clasificar');
+        const status = isActualFQC ? 'RECHAZADO' : 'Pendiente';
+        const sinceISO = opLog?.created_at
+          ? new Date(new Date(opLog.created_at).getTime() - 5000).toISOString()
+          : new Date(Date.now() - 5000).toISOString();
+
+        // Si la BD ya creo el scrap via trigger (o hubo doble submit), evitamos duplicar.
+        const dup = await hasRecentDuplicateScrap({
+          productionOrderId: selectedOrderId,
+          routingId: currentStep.routing_id,
           quantity: bad,
-          operator_name: formData.operator_name,
-          defect_comment: formData.defect_notes,
-          lot_number: formData.lot_number,
-          status: isActualFQC ? 'RECHAZADO' : 'Pendiente'
+          operatorName: formData.operator_name,
+          lotNumber: formData.lot_number,
+          status,
+          defectType,
+          sinceISO,
         });
+
+        if (!dup) {
+          await supabase.from('production_scrap').insert({
+            production_order_id: selectedOrderId,
+            routing_id: currentStep.routing_id,
+            defect_type: defectType,
+            quantity: bad,
+            operator_name: formData.operator_name,
+            defect_comment: formData.defect_notes,
+            lot_number: formData.lot_number,
+            status,
+          });
+        }
       }
 
       // Si es FQC y hay piezas buenas, generamos el registro de "Aprobado" para alimentar las métricas de calidad
       if (isActualFQC && good > 0) {
         const generatedLot = new Date().toISOString().slice(2,10).replace(/-/g,'') + '01';
-        await supabase.from('production_scrap').insert({
-          production_order_id: selectedOrderId,
-          routing_id: currentStep.routing_id,
-          defect_type: 'N/A',
+        const lotNumber = formData.lot_number || generatedLot;
+        const sinceISO = opLog?.created_at
+          ? new Date(new Date(opLog.created_at).getTime() - 5000).toISOString()
+          : new Date(Date.now() - 5000).toISOString();
+
+        const dup = await hasRecentDuplicateScrap({
+          productionOrderId: selectedOrderId,
+          routingId: currentStep.routing_id,
           quantity: good,
-          operator_name: formData.operator_name,
-          defect_comment: formData.adjustment_comment || 'Inspección FQC - Liberación Directa',
-          lot_number: formData.lot_number || generatedLot,
-          status: 'APROBADO'
+          operatorName: formData.operator_name,
+          lotNumber,
+          status: 'APROBADO',
+          defectType: 'N/A',
+          sinceISO,
         });
+
+        if (!dup) {
+          await supabase.from('production_scrap').insert({
+            production_order_id: selectedOrderId,
+            routing_id: currentStep.routing_id,
+            defect_type: 'N/A',
+            quantity: good,
+            operator_name: formData.operator_name,
+            defect_comment: formData.adjustment_comment || 'Inspección FQC - Liberación Directa',
+            lot_number: lotNumber,
+            status: 'APROBADO',
+          });
+        }
       }
 
       setFormData({ ...formData, quantity_good: '', quantity_bad: '', defect_comment: '', adjustment_comment: '', lot_number: '' });
