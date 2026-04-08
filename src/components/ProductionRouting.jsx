@@ -28,6 +28,7 @@ const ProductionRouting = ({ userRole }) => {
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null, mode: 'initial' }); // modes: initial | deactivate
   const [copyModal, setCopyModal] = useState({ show: false, sourcePartId: null, targetPartId: '' });
   const [showMachineDropdown, setShowMachineDropdown] = useState(false);
+  const [operationTouched, setOperationTouched] = useState(false);
   const [formData, setFormData] = useState({
     part_number_id: '',
     sequence: '',
@@ -178,6 +179,7 @@ const ProductionRouting = ({ userRole }) => {
       instructions: routing.instructions || '',
       active: routing.active ?? true
     });
+    setOperationTouched(true);
     setShowModal(true);
   };
 
