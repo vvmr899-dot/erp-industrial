@@ -166,7 +166,14 @@ const ProductionCapture = ({ userRole }) => {
       .select('id, nombre')
       .eq('activo', true)
       .order('nombre');
-    if (data) setOperators(data);
+    if (data && data.length > 0) {
+      setOperators(data);
+    } else {
+      setOperators([
+        { id: 'op1', nombre: 'Ramses' },
+        { id: 'op2', nombre: 'Raquel' }
+      ]);
+    }
   };
 
   const fetchOrderDetails = async (orderId) => {
