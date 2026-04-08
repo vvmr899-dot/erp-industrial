@@ -502,8 +502,15 @@ const ProductionRouting = ({ userRole }) => {
                               work_center: m.tipo || ''
                             };
 
-                            if (!operationTouched && (!formData.operation_name || formData.operation_name === formData.selected_machine)) {
-                              next.operation_name = m.id;
+                            const wasAutoFilled =
+                              !operationTouched &&
+                              (!formData.operation_name ||
+                                formData.operation_name === formData.selected_machine ||
+                                formData.operation_name === formData.work_center);
+
+                            if (wasAutoFilled) {
+                              // Nombre de operacion debe seguir el mismo texto del Centro de Trabajo
+                              next.operation_name = m.tipo || m.id;
                             }
 
                             setFormData(next);
