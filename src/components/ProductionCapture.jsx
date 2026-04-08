@@ -512,30 +512,65 @@ const fetchWIP = async (orderId) => {
         defectType,
         sinceISO,
       }) => {
-        const base = supabase
+        const { data, error } = await supabase
           .from('production_scrap')
-          .select('id')
+          .select('id, status, disposition, defect_type, lot_number, created_at')
           .eq('production_order_id', productionOrderId)
           .eq('routing_id', routingId)
           .eq('quantity', quantity)
           .eq('operator_name', operatorName)
-          .eq('status', status)
           .gte('created_at', sinceISO)
-          .limit(1);
+          .order('created_at', { ascending: false })
+          .limit(10);
 
-        // Intento 1: match estricto (incluye lote y tipo)
-        let q1 = base;
-        if (lotNumber) q1 = q1.eq('lot_number', lotNumber);
-        if (defectType) q1 = q1.eq('defect_type', defectType);
+        if (error) throw error;
 
-        const { data: d1, error: e1 } = await q1;
-        if (e1) throw e1;
-        if ((d1 || []).length > 0) return true;
+        const candidates = data || [];
 
-        // Intento 2: match laxo (por si un trigger guarda campos diferentes)
-        const { data: d2, error: e2 } = await base;
-        if (e2) throw e2;
-        return (d2 || []).length > 0;
+        const normalize = (v) => (v || '').toString().trim().toUpperCase();
+
+        const desired = normalize(status);
+        const desiredSet = new Set();
+
+        // Normalizar equivalencias status/disposition
+        if (desired === 'PENDIENTE' || desired === 'PENDING') {
+          ['PENDIENTE', 'PENDING'].forEach(v => desiredSet.add(v));
+        } else if (desired === 'APROBADO' || desired === 'APPROVED' || desired === 'LIBERADO') {
+          ['APROBADO', 'APPROVED', 'LIBERADO'].forEach(v => desiredSet.add(v));
+        } else if (desired === 'RECHAZADO' || desired === 'REJECTED' || desired === 'NO RETRABAJADO') {
+          ['RECHAZADO', 'REJECTED', 'NO RETRABAJADO'].forEach(v => desiredSet.add(v));
+        } else if (desired) {
+          desiredSet.add(desired);
+        }
+
+        const lotNorm = normalize(lotNumber);
+        const defectNorm = normalize(defectType);
+
+        // Intento 1: match estricto (incluye lote y tipo cuando vienen)
+        const strict = candidates.some((c) => {
+          const statusNorm = normalize(c.status);
+          const dispNorm = normalize(c.disposition);
+          const stateNorm = statusNorm || dispNorm;
+          const stateOk = desiredSet.size === 0 ? true : desiredSet.has(stateNorm);
+          if (!stateOk) return false;
+
+          if (lotNorm && normalize(c.lot_number) !== lotNorm) return false;
+          if (defectNorm && normalize(c.defect_type) !== defectNorm) return false;
+          return true;
+        });
+
+        if (strict) return true;
+
+        // Intento 2: match laxo (por si el trigger guarda lote/tipo diferente)
+        const loose = candidates.some((c) => {
+          const statusNorm = normalize(c.status);
+          const dispNorm = normalize(c.disposition);
+          const stateNorm = statusNorm || dispNorm;
+          const stateOk = desiredSet.size === 0 ? true : desiredSet.has(stateNorm);
+          return stateOk;
+        });
+
+        return loose;
       };
 
       // Si se reportaron piezas con defectos, las registramos en Calidad (production_scrap)
