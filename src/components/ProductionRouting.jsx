@@ -28,7 +28,6 @@ const ProductionRouting = ({ userRole }) => {
   const [deleteConfirm, setDeleteConfirm] = useState({ show: false, id: null, mode: 'initial' }); // modes: initial | deactivate
   const [copyModal, setCopyModal] = useState({ show: false, sourcePartId: null, targetPartId: '' });
   const [showMachineDropdown, setShowMachineDropdown] = useState(false);
-  const [operationTouched, setOperationTouched] = useState(false);
   const [formData, setFormData] = useState({
     part_number_id: '',
     sequence: '',
@@ -74,6 +73,12 @@ const ProductionRouting = ({ userRole }) => {
 
     return out;
   })();
+
+  const isMachineId = (value) => {
+    if (!value) return false;
+    const v = String(value).trim().toUpperCase();
+    return machineOptions.some(m => String(m?.id || '').trim().toUpperCase() === v);
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -134,9 +139,6 @@ const ProductionRouting = ({ userRole }) => {
     const sub = parts.length > 1 ? parseInt(parts[1], 10) || 0 : null;
     const finalStr = sub ? `${base}-${sub}` : `${base}`;
 
-    const selectedMachine = formData.selected_machine;
-    const machineType = formData.work_center || formData.machine_area;
-
     const dataToSave = {
       ...formData,
       sequence: base,
@@ -145,8 +147,10 @@ const ProductionRouting = ({ userRole }) => {
       sequence_str: finalStr,
       standard_time_minutes: parseFloat(formData.standard_time_minutes) || 0,
       setup_time_minutes: parseFloat(formData.setup_time_minutes) || 0,
-      machine_area: machineType,
-      work_center: formData.selected_machine
+      // En tabla: MAQUINA/AREA debe ser el ID/numero de maquina.
+      machine_area: formData.selected_machine,
+      // Centro de trabajo = tipo/area (Maquinado, Corte, Limpieza, CALIDAD, ALMACEN, etc.).
+      work_center: formData.work_center
     };
 
     if (editingId) {
@@ -165,21 +169,28 @@ const ProductionRouting = ({ userRole }) => {
   };
 
   const handleEdit = (routing) => {
+    const machineId = isMachineId(routing.machine_area)
+      ? routing.machine_area
+      : (isMachineId(routing.work_center) ? routing.work_center : (routing.machine_area || routing.work_center || ''));
+
+    const wc = isMachineId(routing.work_center)
+      ? (routing.machine_area || '')
+      : (routing.work_center || '');
+
     setEditingId(routing.id);
     setFormData({
       part_number_id: routing.part_number_id,
       sequence: routing.sequence_str || routing.sequence,
       operation_name: routing.operation_name,
       machine_area: routing.machine_area,
-      work_center: routing.work_center || '',
-      selected_machine: routing.work_center || '',
+      work_center: wc,
+      selected_machine: machineId,
       standard_time_minutes: routing.standard_time_minutes,
       setup_time_minutes: routing.setup_time_minutes || 0,
       is_final_operation: routing.is_final_operation || false,
       instructions: routing.instructions || '',
       active: routing.active ?? true
     });
-    setOperationTouched(true);
     setShowModal(true);
   };
 
@@ -269,7 +280,6 @@ const ProductionRouting = ({ userRole }) => {
       instructions: '',
       active: true
     });
-    setOperationTouched(false);
   };
 
   // Group routings by part number for display
@@ -369,7 +379,11 @@ const ProductionRouting = ({ userRole }) => {
                         <td style={{ padding: '1rem' }}>
                           <div style={{ fontWeight: '600' }}>{step.operation_name}</div>
                         </td>
-                        <td style={{ padding: '1rem' }}>{step.machine_area}</td>
+                        <td style={{ padding: '1rem' }}>
+                          {isMachineId(step.machine_area)
+                            ? step.machine_area
+                            : (isMachineId(step.work_center) ? step.work_center : (step.machine_area || step.work_center))}
+                        </td>
                         <td style={{ padding: '1rem' }}>{step.standard_time_minutes}</td>
                         <td style={{ padding: '1rem' }}>{step.setup_time_minutes || 0}</td>
                         <td style={{ padding: '1rem' }}>
@@ -453,7 +467,6 @@ const ProductionRouting = ({ userRole }) => {
                   required
                   value={formData.operation_name}
                   onChange={(e) => {
-                    setOperationTouched(true);
                     setFormData({ ...formData, operation_name: e.target.value });
                   }}
                   style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', background: '#111827', color: 'var(--text)' }}
@@ -501,17 +514,6 @@ const ProductionRouting = ({ userRole }) => {
                               selected_machine: m.id,
                               work_center: m.tipo || ''
                             };
-
-                            const wasAutoFilled =
-                              !operationTouched &&
-                              (!formData.operation_name ||
-                                formData.operation_name === formData.selected_machine ||
-                                formData.operation_name === formData.work_center);
-
-                            if (wasAutoFilled) {
-                              // Nombre de operacion debe seguir el mismo texto del Centro de Trabajo
-                              next.operation_name = m.tipo || m.id;
-                            }
 
                             setFormData(next);
                             setShowMachineDropdown(false);
