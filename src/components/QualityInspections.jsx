@@ -969,6 +969,7 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   const { lang, setLang, t } = useLanguage();
   const [tab, setTab] = useState("dashboard");
   const [scrap, setScrap] = useState([]);
+  const [inventoryApprovedPieces, setInventoryApprovedPieces] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
@@ -1010,23 +1011,35 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
   const fetchScrap = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('production_scrap')
-        .select(`
-          *,
-          order:production_orders(order_number, part_numbers(part_number, description)),
-          routing:production_routing(operation_name, sequence)
-        `)
-        .order('created_at', { ascending: false });
+      const [scrapRes, invRes] = await Promise.all([
+        supabase
+          .from('production_scrap')
+          .select(`
+            *,
+            order:production_orders(order_number, part_numbers(part_number, description)),
+            routing:production_routing(operation_name, sequence)
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('inventory_stock')
+          .select('quantity')
+          .gt('quantity', 0),
+      ]);
 
-      if (error) throw error;
+      if (scrapRes.error) throw scrapRes.error;
 
-      setScrap(data || []);
+      setScrap(scrapRes.data || []);
       setIsMockData(false);
+
+      if (!invRes.error && invRes.data) {
+        const sum = invRes.data.reduce((acc, curr) => acc + (parseFloat(curr.quantity) || 0), 0);
+        setInventoryApprovedPieces(sum);
+      }
     } catch (error) {
       console.warn('Error loading from Supabase:', error);
       setScrap([]);
       setIsMockData(false);
+      // No tocar inventoryApprovedPieces si falla; evita brincar a 0 por error temporal
     }
     setLoading(false);
   };
@@ -1211,8 +1224,9 @@ export default function QualityInspections({ session, userRole, onSignOut, embed
     totalScrap: 0,
   };
 
-  stats.approvedPieces = stats.approvedDefectPieces;
-  stats.rejectedPieces = stats.rejectedDefectPieces;
+  // Piezas aprobadas por Calidad (inventario PT) + dictamenes sobre defectos
+  stats.approvedPieces = (Number(inventoryApprovedPieces) || 0) + (Number(stats.approvedDefectPieces) || 0);
+  stats.rejectedPieces = Number(stats.rejectedDefectPieces) || 0;
   stats.totalPieces = stats.approvedPieces + stats.rejectedPieces;
   stats.totalScrap = stats.rejectedPieces;
 
